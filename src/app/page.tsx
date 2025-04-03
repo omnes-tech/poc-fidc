@@ -19,6 +19,13 @@ export default function Home() {
         >
           Understand FIDC in Detail
         </Link>
+        
+        <Link 
+          href="/investor" 
+          className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-center"
+        >
+          Investor Portal (Invest & Redeem)
+        </Link>
       </div>
       
       <p className="mt-8 text-center text-gray-600 max-w-md">

@@ -657,6 +657,93 @@ export function useContractInteraction() {
     [getContracts, address]
   );
 
+  const redeemAll = useCallback(
+    async (fidcId: number, investmentId: number) => {
+      setIsProcessing(true);
+      setError(null);
+
+      try {
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        const signer = await provider.getSigner();
+
+        console.log(`\n=== RESGATANDO TODO O INVESTIMENTO ===`);
+        console.log(`FIDC ID: ${fidcId}`);
+        console.log(`Investment ID: ${investmentId}`);
+        console.log(`Investidor: ${address}`);
+        console.log(`===========================\n`);
+
+        const contract = new ethers.Contract(
+          FIDC_Management_address,
+          fidc_abi,
+          signer
+        );
+
+        const redeemGasLimit = 3000000;
+        const tx = await contract.redeemAll(fidcId, investmentId, {
+          gasLimit: redeemGasLimit,
+        });
+        setTxHash(tx.hash);
+
+        const receipt = await tx.wait();
+        return { success: true, receipt };
+      } catch (err) {
+        console.error("Error redeeming full investment:", err);
+        setError(err instanceof Error ? err.message : "Unknown error occurred");
+        return { success: false, error: err };
+      } finally {
+        setIsProcessing(false);
+      }
+    },
+    [address]
+  );
+
+  const redeemAllManager = useCallback(
+    async (fidcId: number, investors: string[]) => {
+      setIsProcessing(true);
+      setError(null);
+
+      try {
+        const { fidcContract } = await getContracts();
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        const signer = await provider.getSigner();
+
+        const fidc = await fidcContract.fidcs(fidcId);
+        if (fidc.manager.toLowerCase() !== address!.toLowerCase()) {
+          setError("Apenas o gestor pode resgatar todos os investimentos de uma vez");
+          return { success: false, error: "Only manager can use redeemAllManager" };
+        }
+
+        console.log(`\n=== GESTOR RESGATANDO TODOS OS INVESTIMENTOS ===`);
+        console.log(`FIDC ID: ${fidcId}`);
+        console.log(`Investidores: ${investors.join(', ')}`);
+        console.log(`Gestor: ${address}`);
+        console.log(`===========================\n`);
+
+        const contract = new ethers.Contract(
+          FIDC_Management_address,
+          fidc_abi,
+          signer
+        );
+
+        const redeemGasLimit = 5000000; // Limite maior pois processa múltiplos investidores
+        const tx = await contract.redeemAllManager(fidcId, investors, {
+          gasLimit: redeemGasLimit,
+        });
+        setTxHash(tx.hash);
+
+        const receipt = await tx.wait();
+        return { success: true, receipt };
+      } catch (err) {
+        console.error("Error in manager redeeming all investments:", err);
+        setError(err instanceof Error ? err.message : "Unknown error occurred");
+        return { success: false, error: err };
+      } finally {
+        setIsProcessing(false);
+      }
+    },
+    [getContracts, address]
+  );
+
   const getFIDCDetails = useCallback(
     async (fidcId: number) => {
       try {
@@ -843,6 +930,8 @@ export function useContractInteraction() {
     approveInvestor,
     invest,
     redeem,
+    redeemAll,
+    redeemAllManager,
     getFIDCDetails,
     getInvestorPosition,
     fundInvestorWallet,

@@ -91,6 +91,16 @@ export interface FIDCContract extends BaseContract {
     _role: string,
     _addresses: string[]
   ): Promise<any>;
+
+  redeemAll(
+    _fidcId: number | bigint,
+    _investmentId: number | bigint
+  ): Promise<any>;
+
+  redeemAllManager(
+    _fidcId: number | bigint,
+    _investors: string[]
+  ): Promise<any>;
 }
 
 export interface ERC20Contract extends BaseContract {
