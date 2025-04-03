@@ -10,7 +10,7 @@ export default function WagmiProv({ children }: PropsWithChildren) {
   const config = getDefaultConfig({
     appName: "FIDC",
     projectId: "4ebbf2eddb8738c4c84cd8082b5e9756",
-    chains: [viemChains.polygonAmoy],
+    chains: [viemChains.holesky],
     ssr: true,
   });
 

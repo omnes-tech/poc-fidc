@@ -63,7 +63,6 @@ export function useContractInteraction() {
         const balance = await provider.getBalance(address!);
         console.log("Current POL balance:", ethers.formatEther(balance));
 
-        // Estimar o custo de gás
         const feeData = await provider.getFeeData();
         const estimatedGasCost =
           (feeData.gasPrice || BigInt(0)) * BigInt(1000000);
@@ -73,7 +72,6 @@ export function useContractInteraction() {
           ethers.formatEther(estimatedGasCost)
         );
 
-        // Verificar se há saldo suficiente
         if (balance < estimatedGasCost) {
           setError(
             `Saldo POL insuficiente. Você tem ${ethers.formatEther(
@@ -88,7 +86,6 @@ export function useContractInteraction() {
           };
         }
 
-        // Imprimir os valores dos parâmetros para debugging
         console.log("initializeFIDC parameters recebidos:", {
           manager,
           validator,
@@ -99,7 +96,6 @@ export function useContractInteraction() {
           seniorSpread,
         });
 
-        // Verificar se algum dos endereços é inválido
         if (!ethers.isAddress(manager)) {
           setError(`Endereço do gestor inválido: ${manager}`);
           return { success: false, error: "Invalid manager address" };
@@ -113,11 +109,9 @@ export function useContractInteraction() {
           return { success: false, error: "Invalid payable address" };
         }
 
-        // Validar parâmetros de acordo com as limitações do contrato
-        // Período de carência: entre 1 e 365 dias
         const ONE_DAY_IN_SECONDS = 86400;
-        const MIN_GRACE_PERIOD = ONE_DAY_IN_SECONDS; // 1 dia em segundos
-        const MAX_GRACE_PERIOD = 365 * ONE_DAY_IN_SECONDS; // 365 dias em segundos
+        const MIN_GRACE_PERIOD = ONE_DAY_IN_SECONDS;
+        const MAX_GRACE_PERIOD = 365 * ONE_DAY_IN_SECONDS;
 
         if (gracePeriod < MIN_GRACE_PERIOD) {
           setError(
@@ -136,8 +130,7 @@ export function useContractInteraction() {
           return { success: false, error: "Grace period too long" };
         }
 
-        // Validar spread de senior: máximo 20% (2000 BPS)
-        const MAX_SENIOR_SPREAD = 2000; // 20% em BPS
+        const MAX_SENIOR_SPREAD = 2000;
         if (seniorSpread > MAX_SENIOR_SPREAD) {
           setError(
             `Spread de senior muito alto. Máximo: ${MAX_SENIOR_SPREAD / 100}%`
@@ -145,15 +138,13 @@ export function useContractInteraction() {
           return { success: false, error: "Senior spread too high" };
         }
 
-        // Validar taxa: deve ser razoável (assumimos máximo de 10%)
-        const MAX_FEE = 1000; // 10% em BPS
+        const MAX_FEE = 1000;
         if (fee > MAX_FEE) {
           setError(`Taxa muito alta. Máximo recomendado: ${MAX_FEE / 100}%`);
           return { success: false, error: "Fee too high" };
         }
 
-        // Validar rendimento anual (baseado na interface, parece ter um máximo)
-        const MAX_YIELD = 5000; // 50% em BPS (assumindo um limite razoável)
+        const MAX_YIELD = 5000;
         if (annualYield > MAX_YIELD) {
           setError(
             `Rendimento anual muito alto. Máximo recomendado: ${
@@ -206,10 +197,8 @@ export function useContractInteraction() {
             `=========================`
         );
 
-        // Tentar fazer uma estimativa mais precisa do gás se o gás fixo for muito alto
         let gasToUse = gasLimit;
         try {
-          // Estimar o gás necessário para a transação
           const gasEstimate = await rawContract.initializeFIDC.estimateGas(
             manager,
             validator,
@@ -220,10 +209,8 @@ export function useContractInteraction() {
             seniorSpreadParam
           );
 
-          // Adicionar uma margem de segurança de 20% à estimativa
           const safeGasEstimate = Math.floor(Number(gasEstimate) * 1.2);
 
-          // Usar a estimativa se for menor que o limite fixo, mas não menos que 150,000
           if (safeGasEstimate < gasLimit && safeGasEstimate >= 150000) {
             gasToUse = safeGasEstimate;
             console.log(
@@ -237,7 +224,6 @@ export function useContractInteraction() {
           );
         }
 
-        // Preparar os dados da transação com gasLimit ajustado
         const tx = await rawContract.initializeFIDC(
           manager,
           validator,
@@ -255,18 +241,14 @@ export function useContractInteraction() {
         console.log("Transaction sent with hash:", tx.hash);
         console.log("Using gas limit:", gasToUse);
 
-        // Esperando o recibo da transação
         console.log("Waiting for transaction confirmation...");
         const receipt = await tx.wait();
         console.log("Transaction confirmed:", receipt);
 
-        // Se a transação foi confirmada mas o status é 0, isso significa que ela reverteu na blockchain
         if (receipt && receipt.status === 0) {
           console.error("Transaction reverted on-chain:", receipt);
 
-          // Tentar buscar mais detalhes sobre o motivo da reversão
           try {
-            // Usar o trace de execução para tentar encontrar o motivo da reversão
             const trace = await provider.call({
               to: tx.to,
               from: tx.from,
@@ -275,7 +257,6 @@ export function useContractInteraction() {
             });
             console.log("Transaction trace:", trace);
           } catch (traceErr: any) {
-            // Se a chamada falhar com uma mensagem específica, podemos extrair o motivo da reversão
             if (traceErr.data || traceErr.message) {
               const errorMsg = traceErr.data || traceErr.message;
               console.error("Revert reason:", errorMsg);
@@ -284,7 +265,6 @@ export function useContractInteraction() {
             }
           }
 
-          // Se não conseguirmos extrair um motivo específico, usamos uma mensagem genérica
           setError(
             "Transação revertida na blockchain. Verifique se os valores de rendimento, spread e taxa estão dentro dos limites permitidos."
           );
@@ -312,7 +292,6 @@ export function useContractInteraction() {
       } catch (err: any) {
         console.error("Error initializing FIDC:", err);
 
-        // Verificar se o erro está relacionado à execução revertida
         if (err.code === "CALL_EXCEPTION" && err.action === "sendTransaction") {
           console.log("Transaction reverted during execution");
           setError(
@@ -377,14 +356,12 @@ export function useContractInteraction() {
         const scheduleAmountBigInt = ethers.parseEther(scheduleAmount);
         const collateralAmountBigInt = ethers.parseEther(collateralAmount);
 
-        // Criar uma instância do contrato com o signer que inclui as opções de overrides
         const contract = new ethers.Contract(
           FIDC_Management_address,
           fidc_abi,
           signer
         );
 
-        // Chamar o método do contrato com overrides como último parâmetro
         const tx = await contract.approvedEmissionValidator(
           pj,
           fidcId,
@@ -393,30 +370,38 @@ export function useContractInteraction() {
           isApproved,
           { gasLimit }
         );
-        
+
         setTxHash(tx.hash);
         console.log("Transaction sent with hash:", tx.hash);
 
         const receipt = await tx.wait();
         console.log("Transaction confirmed:", receipt);
-        
+
         return { success: true, receipt };
       } catch (err: any) {
         console.error("Error approving emission (validator):", err);
-        
-        // Tratamento de erros
+
         if (err.code === -32603) {
-          setError("Internal JSON-RPC error. Try with different parameters or contact support.");
-        } else if (err.message && err.message.includes("gas required exceeds")) {
-          setError("Transaction needs more gas than provided. Try increasing gas limit.");
+          setError(
+            "Internal JSON-RPC error. Try with different parameters or contact support."
+          );
+        } else if (
+          err.message &&
+          err.message.includes("gas required exceeds")
+        ) {
+          setError(
+            "Transaction needs more gas than provided. Try increasing gas limit."
+          );
         } else if (err.message && err.message.includes("user rejected")) {
           setError("Transaction was rejected in your wallet.");
         } else if (err.message && err.message.includes("insufficient funds")) {
           setError("You don't have enough ETH to pay for gas fees.");
         } else {
-          setError(err instanceof Error ? err.message : "Unknown error occurred");
+          setError(
+            err instanceof Error ? err.message : "Unknown error occurred"
+          );
         }
-        
+
         return { success: false, error: err };
       } finally {
         setIsProcessing(false);
@@ -437,14 +422,12 @@ export function useContractInteraction() {
 
         const amountBigInt = ethers.parseEther(amount);
 
-        // Usando contrato ERC20 com método raw para poder passar opções de transação
         const erc20Contract = new ethers.Contract(
           ERC20Mock_address,
           erc20_abi,
           signer
         );
 
-        // Aprovação do token ERC20
         const approveGasLimit = 1000000;
         console.log(
           `Usando limite de gás fixo para approve: ${approveGasLimit.toLocaleString()} unidades`
@@ -457,7 +440,6 @@ export function useContractInteraction() {
         );
         await approveTx.wait();
 
-        // Criar nova instância do contrato FIDC
         const fidcContract = new ethers.Contract(
           FIDC_Management_address,
           fidc_abi,
@@ -498,19 +480,17 @@ export function useContractInteraction() {
         const provider = new ethers.BrowserProvider(window.ethereum);
         const signer = await provider.getSigner();
 
-        // Criar nova instância do contrato com signer
         const contract = new ethers.Contract(
           FIDC_Management_address,
           fidc_abi,
           signer
         );
 
-        const tx = await contract.approveInvestor(
-          [investor], 
-          type, 
-          fidcId,
-          { gasLimit }
-        );
+        console.log([investor], type, fidcId, { gasLimit });
+
+        const tx = await contract.approveInvestor([investor], type, fidcId, {
+          gasLimit,
+        });
         setTxHash(tx.hash);
 
         const receipt = await tx.wait();
@@ -532,11 +512,10 @@ export function useContractInteraction() {
       setError(null);
 
       try {
-        const { fidcContract, drexContract } = await getContracts();
+        const { fidcContract } = await getContracts();
         const provider = new ethers.BrowserProvider(window.ethereum);
         const signer = await provider.getSigner();
 
-        // Verificar a posição atual do investidor para determinar se é sênior ou subordinado
         const investorPosition = await fidcContract.getInvestorPosition(
           address!,
           fidcId
@@ -545,56 +524,47 @@ export function useContractInteraction() {
           (inv) => inv.isSenior
         );
 
-        // Buscar detalhes do FIDC
         const fidcDetails = await fidcContract.fidcs(fidcId);
         const totalInvested = fidcDetails.invested;
 
-        // Obter a posição de todos os investimentos e calcular quanto é senior
         const allPositions = await fidcContract.getInvestorPosition(
           address!,
           fidcId
         );
         let seniorInvested = BigInt(0);
 
-        // Como não temos acesso direto a todo o valor de investimentos senior,
-        // podemos usar esta abordagem apenas para validação da proporção no lado do cliente
         for (const investment of allPositions.investments) {
           if (investment.isSenior) {
             seniorInvested += investment.amount;
           }
         }
 
-        // Validar a proporção sênior/subordinado (MIN_SENIOR_RATIO = 50%)
-        // Este teste só se aplica para investimentos subordinados
         if (!isSenior) {
           const amountBigInt = ethers.parseEther(amount);
           const newTotalInvested = totalInvested + amountBigInt;
-          const MIN_SENIOR_RATIO = 5000; // 50% em BPS
+          const MIN_SENIOR_RATIO = 5000;
 
-          // Calcular nova proporção senior após este investimento
           const seniorRatioBps =
             (seniorInvested * BigInt(10000)) / newTotalInvested;
 
-          if (seniorRatioBps < BigInt(MIN_SENIOR_RATIO)) {
+          /* if (seniorRatioBps < BigInt(MIN_SENIOR_RATIO)) {
             setError(
               `Proporção mínima de investimento sênior não atingida. Proporção atual: ${
                 Number(seniorRatioBps) / 100
               }%. Mínimo necessário: ${MIN_SENIOR_RATIO / 100}%`
             );
             return { success: false, error: "Senior ratio too low" };
-          }
+          } */
         }
 
         const amountBigInt = ethers.parseEther(amount);
 
-        // Usar contrato ERC20 raw para poder passar opções de transação
         const erc20Contract = new ethers.Contract(
           ERC20Mock_address,
           erc20_abi,
           signer
         );
 
-        // Aprovação do token
         const approveGasLimit = 3000000;
         console.log(
           `Usando limite de gás fixo para approve: ${approveGasLimit.toLocaleString()} unidades`
@@ -607,7 +577,6 @@ export function useContractInteraction() {
         );
         await approveTx.wait();
 
-        // Investimento
         const investGasLimit = 3000000;
         console.log(
           `Usando limite de gás fixo para investimento: ${investGasLimit.toLocaleString()} unidades`
@@ -617,18 +586,15 @@ export function useContractInteraction() {
         console.log(`Investidor: ${address}`);
         console.log(`Tipo: ${isSenior ? "Sênior" : "Subordinado"}`);
 
-        // Criar nova instância do contrato
         const contract = new ethers.Contract(
           FIDC_Management_address,
           fidc_abi,
           signer
         );
 
-        const tx = await contract.invest(
-          fidcId, 
-          amountBigInt,
-          { gasLimit: investGasLimit }
-        );
+        const tx = await contract.invest(fidcId, amountBigInt, {
+          gasLimit: investGasLimit,
+        });
         setTxHash(tx.hash);
 
         const receipt = await tx.wait();
@@ -653,7 +619,7 @@ export function useContractInteraction() {
         const { fidcContract } = await getContracts();
         const provider = new ethers.BrowserProvider(window.ethereum);
         const signer = await provider.getSigner();
-        
+
         const amountBigInt = ethers.parseEther(amount);
 
         const redeemGasLimit = 3000000;
@@ -667,19 +633,15 @@ export function useContractInteraction() {
         );
         console.log(`===========================\n`);
 
-        // Criar nova instância do contrato
         const contract = new ethers.Contract(
           FIDC_Management_address,
           fidc_abi,
           signer
         );
 
-        const tx = await contract.redeem(
-          fidcId,
-          investmentId,
-          amountBigInt,
-          { gasLimit: redeemGasLimit }
-        );
+        const tx = await contract.redeem(fidcId, investmentId, amountBigInt, {
+          gasLimit: redeemGasLimit,
+        });
         setTxHash(tx.hash);
 
         const receipt = await tx.wait();
@@ -752,7 +714,6 @@ export function useContractInteraction() {
     [getContracts]
   );
 
-  // Função para enviar tokens DREX para endereços de investidores
   const fundInvestorWallet = useCallback(
     async (recipient: string, amount: string) => {
       setIsProcessing(true);
@@ -761,7 +722,6 @@ export function useContractInteraction() {
       try {
         const { drexContract } = await getContracts();
 
-        // Verificar o saldo atual
         const currentBalance = await drexContract.balanceOf(recipient);
         console.log(
           `Saldo atual de ${recipient}: ${ethers.formatEther(
@@ -769,28 +729,15 @@ export function useContractInteraction() {
           )} DREX`
         );
 
-        // Verificar se o contrato tem método mint (caso seja um contrato de teste)
         const drexContractAny = drexContract as any;
-        if (typeof drexContractAny.mint === "function") {
-          console.log(`Realizando mint de ${amount} DREX para ${recipient}`);
-          const tx = await drexContractAny.mint(
-            recipient,
-            ethers.parseEther(amount)
-          );
-          await tx.wait();
-          console.log(`Mint realizado com sucesso!`);
-        } else {
-          // Caso não tenha mint, tentar transferir do próprio endereço
-          console.log(`Transferindo ${amount} DREX para ${recipient}`);
-          const tx = await drexContract.transfer(
-            recipient,
-            ethers.parseEther(amount)
-          );
-          await tx.wait();
-          console.log(`Transferência realizada com sucesso!`);
-        }
+        console.log(`Realizando mint de ${amount} DREX para ${recipient}`);
+        const tx = await drexContractAny.mint(
+          recipient,
+          ethers.parseEther(amount)
+        );
+        await tx.wait();
+        console.log(`Mint realizado com sucesso!`);
 
-        // Verificar o novo saldo
         const newBalance = await drexContract.balanceOf(recipient);
         console.log(
           `Novo saldo de ${recipient}: ${ethers.formatEther(newBalance)} DREX`
@@ -808,7 +755,6 @@ export function useContractInteraction() {
     [getContracts]
   );
 
-  // Parar um FIDC (status STOPPED)
   const stopFIDC = useCallback(
     async (fidcId: number) => {
       setIsProcessing(true);
@@ -819,24 +765,19 @@ export function useContractInteraction() {
         const provider = new ethers.BrowserProvider(window.ethereum);
         const signer = await provider.getSigner();
 
-        // Verificar se quem chamou é o manager
         const fidc = await fidcContract.fidcs(fidcId);
         if (fidc.manager.toLowerCase() !== address!.toLowerCase()) {
           setError("Apenas o gestor pode parar um FIDC");
           return { success: false, error: "Only manager can stop FIDC" };
         }
 
-        // Criar nova instância do contrato
         const contract = new ethers.Contract(
           FIDC_Management_address,
           fidc_abi,
           signer
         );
 
-        const tx = await contract.stopFIDC(
-          fidcId,
-          { gasLimit }
-        );
+        const tx = await contract.stopFIDC(fidcId, { gasLimit });
         setTxHash(tx.hash);
 
         const receipt = await tx.wait();
@@ -852,7 +793,6 @@ export function useContractInteraction() {
     [getContracts, address, gasLimit]
   );
 
-  // Iniciar liquidação de um FIDC (status LIQUIDATED)
   const initiateLiquidation = useCallback(
     async (fidcId: number) => {
       setIsProcessing(true);
@@ -863,24 +803,19 @@ export function useContractInteraction() {
         const provider = new ethers.BrowserProvider(window.ethereum);
         const signer = await provider.getSigner();
 
-        // Verificar se quem chamou é o manager
         const fidc = await fidcContract.fidcs(fidcId);
         if (fidc.manager.toLowerCase() !== address!.toLowerCase()) {
           setError("Apenas o gestor pode iniciar a liquidação de um FIDC");
           return { success: false, error: "Only manager can liquidate FIDC" };
         }
 
-        // Criar nova instância do contrato
         const contract = new ethers.Contract(
           FIDC_Management_address,
           fidc_abi,
           signer
         );
 
-        const tx = await contract.initiateLiquidation(
-          fidcId,
-          { gasLimit }
-        );
+        const tx = await contract.initiateLiquidation(fidcId, { gasLimit });
         setTxHash(tx.hash);
 
         const receipt = await tx.wait();
@@ -910,9 +845,9 @@ export function useContractInteraction() {
     redeem,
     getFIDCDetails,
     getInvestorPosition,
+    fundInvestorWallet,
     stopFIDC,
     initiateLiquidation,
-    fundInvestorWallet,
     getContracts,
   };
 }

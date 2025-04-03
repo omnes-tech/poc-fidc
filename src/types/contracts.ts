@@ -86,6 +86,11 @@ export interface FIDCContract extends BaseContract {
   initiateLiquidation(
     _fidcId: number | bigint
   ): Promise<any>;
+
+  setRole(
+    _role: string,
+    _addresses: string[]
+  ): Promise<any>;
 }
 
 export interface ERC20Contract extends BaseContract {

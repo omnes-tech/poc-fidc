@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useAccount } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useContractInteraction } from "@/hooks/useContractInteraction";
+import { ethers } from "ethers";
 
 const BPS_DENOMINATOR = 10000;
 
@@ -23,7 +24,7 @@ export default function FIDCDemoPage() {
     stopFIDC,
     initiateLiquidation,
     fundInvestorWallet,
-    getContracts
+    getContracts,
   } = useContractInteraction();
 
   const [currentStep, setCurrentStep] = useState(0);
@@ -32,7 +33,9 @@ export default function FIDCDemoPage() {
   const [logs, setLogs] = useState<string[]>([]);
   const [seniorInvestmentId, setSeniorInvestmentId] = useState<number>(0);
   const [subInvestmentId, setSubInvestmentId] = useState<number>(0);
-  const [walletBalances, setWalletBalances] = useState<{[address: string]: string}>({});
+  const [walletBalances, setWalletBalances] = useState<{
+    [address: string]: string;
+  }>({});
   const [mintAmount, setMintAmount] = useState<string>("1000");
 
   const [formData, setFormData] = useState({
@@ -64,7 +67,7 @@ export default function FIDCDemoPage() {
 
   useEffect(() => {
     if (address) {
-      setFormData(prev => ({
+      setFormData((prev) => ({
         ...prev,
         validatorAddress: address,
         payableAddress: address,
@@ -74,26 +77,26 @@ export default function FIDCDemoPage() {
     }
   }, [address]);
 
-  // Função para atualizar os saldos DREX de todas as carteiras relevantes
-  const updateDrexBalances = useCallback(async () => {
+  // Função para atualizar os saldos  de todas as carteiras relevantes
+  const updateStablecoinBalances = useCallback(async () => {
     if (!isConnected) return;
-    
+
     try {
-      const { ethers } = await import("ethers");
       const { drexContract } = await getContracts();
-      
+
       const addresses = [
         address!,
         formData.validatorAddress,
         formData.payableAddress,
         formData.seniorInvestorAddress,
         formData.subInvestorAddress,
-      ].filter((addr, index, self) => 
-        addr && ethers.isAddress(addr) && self.indexOf(addr) === index
+      ].filter(
+        (addr, index, self) =>
+          addr && ethers.isAddress(addr) && self.indexOf(addr) === index
       );
-      
-      const balances: {[address: string]: string} = {};
-      
+
+      const balances: { [address: string]: string } = {};
+
       for (const addr of addresses) {
         try {
           const balance = await drexContract.balanceOf(addr);
@@ -103,24 +106,39 @@ export default function FIDCDemoPage() {
           balances[addr.toLowerCase()] = "Erro";
         }
       }
-      
+
       setWalletBalances(balances);
     } catch (err) {
       console.error("Erro ao atualizar saldos:", err);
     }
-  }, [address, formData.validatorAddress, formData.payableAddress, formData.seniorInvestorAddress, formData.subInvestorAddress, isConnected, getContracts]);
-  
+  }, [
+    address,
+    formData.validatorAddress,
+    formData.payableAddress,
+    formData.seniorInvestorAddress,
+    formData.subInvestorAddress,
+    isConnected,
+    getContracts,
+  ]);
+
   // Atualizar saldos quando endereços mudarem ou após transações
   useEffect(() => {
-    updateDrexBalances();
-  }, [address, formData.validatorAddress, formData.payableAddress, formData.seniorInvestorAddress, formData.subInvestorAddress, updateDrexBalances]);
-  
+    updateStablecoinBalances();
+  }, [
+    address,
+    formData.validatorAddress,
+    formData.payableAddress,
+    formData.seniorInvestorAddress,
+    formData.subInvestorAddress,
+    updateStablecoinBalances,
+  ]);
+
   useEffect(() => {
     if (!isProcessing && txHash) {
       // Atualizar saldos após conclusão de uma transação
-      updateDrexBalances();
+      updateStablecoinBalances();
     }
-  }, [isProcessing, txHash, updateDrexBalances]);
+  }, [isProcessing, txHash, updateStablecoinBalances]);
 
   const addLog = (message: string) => {
     setLogs((prev) => [
@@ -147,15 +165,12 @@ export default function FIDCDemoPage() {
           return;
         }
 
-        // Validar os endereços antes de prosseguir
-        const { ethers } = await import("ethers");
-        
         // Verificar se os endereços são válidos
         if (!ethers.isAddress(formData.validatorAddress)) {
           addLog("Invalid validator address. Please check the format.");
           return;
         }
-        
+
         if (!ethers.isAddress(formData.payableAddress)) {
           addLog("Invalid payable company address. Please check the format.");
           return;
@@ -165,70 +180,45 @@ export default function FIDCDemoPage() {
           addLog("Invalid senior investor address. Please check the format.");
           return;
         }
-        
+
         if (!ethers.isAddress(formData.subInvestorAddress)) {
-          addLog("Invalid subordinated investor address. Please check the format.");
+          addLog(
+            "Invalid subordinated investor address. Please check the format."
+          );
           return;
         }
-        
+
         // Verificar se os endereços são diferentes
         const addresses = [
-          address, 
-          formData.validatorAddress, 
+          address,
+          formData.validatorAddress,
           formData.payableAddress,
           formData.seniorInvestorAddress,
-          formData.subInvestorAddress
+          formData.subInvestorAddress,
         ];
-        
+
         const filteredAddresses = addresses
-          .filter(addr => addr !== undefined && addr !== '')
-          .map(addr => addr!.toLowerCase());
+          .filter((addr) => addr !== undefined && addr !== "")
+          .map((addr) => addr!.toLowerCase());
         const uniqueCount = new Set(filteredAddresses).size;
         if (uniqueCount < 3) {
-          addLog("Warning: Some roles are using the same address. In production, it's recommended to use different addresses.");
+          addLog(
+            "Warning: Some roles are using the same address. In production, it's recommended to use different addresses."
+          );
         }
-        
+
         setProcessing(true);
         addLog("Configuring roles for the FIDC...");
 
         try {
-          // Garantir que as carteiras tenham DREX suficiente
-          addLog("Checking DREX balances for wallets...");
-          
-          // Financiar o pagador com o valor do colateral
-          const payableBalance = Number(walletBalances[formData.payableAddress.toLowerCase()] || "0");
-          if (payableBalance < formData.collateralAmount) {
-            addLog(`Funding payable company wallet (${formData.payableAddress}) with DREX...`);
-            await fundInvestorWallet(formData.payableAddress, formData.collateralAmount.toString());
-          } else {
-            addLog(`Payable company wallet already has sufficient DREX: ${payableBalance} DREX`);
-          }
-          
-          // Financiar os investidores
-          const seniorInvestorBalance = Number(walletBalances[formData.seniorInvestorAddress.toLowerCase()] || "0");
-          if (seniorInvestorBalance < formData.seniorInvestAmount) {
-            addLog(`Funding senior investor wallet (${formData.seniorInvestorAddress}) with DREX...`);
-            await fundInvestorWallet(formData.seniorInvestorAddress, formData.seniorInvestAmount.toString());
-          } else {
-            addLog(`Senior investor wallet already has sufficient DREX: ${seniorInvestorBalance} DREX`);
-          }
-          
-          const subInvestorBalance = Number(walletBalances[formData.subInvestorAddress.toLowerCase()] || "0");
-          if (subInvestorBalance < formData.subInvestAmount) {
-            addLog(`Funding subordinated investor wallet (${formData.subInvestorAddress}) with DREX...`);
-            await fundInvestorWallet(formData.subInvestorAddress, formData.subInvestAmount.toString());
-          } else {
-            addLog(`Subordinated investor wallet already has sufficient DREX: ${subInvestorBalance} DREX`);
-          }
-
-          addLog("Roles configured successfully!");
+          addLog(
+            "Roles will be configured in the next step during FIDC initialization"
+          );
           addLog(`Manager: ${address}`);
           addLog(`Validator: ${formData.validatorAddress}`);
           addLog(`Payable: ${formData.payableAddress}`);
-          addLog(`Senior Investor: ${formData.seniorInvestorAddress}`);
-          addLog(`Subordinated Investor: ${formData.subInvestorAddress}`);
-          
-          updateDrexBalances();
+
+          updateStablecoinBalances();
           setCurrentStep(1);
         } catch (error) {
           addLog(
@@ -251,13 +241,11 @@ export default function FIDCDemoPage() {
           return;
         }
 
-        const { ethers } = await import("ethers");
-        
         if (!ethers.isAddress(formData.validatorAddress)) {
           addLog("Invalid validator address. Please check the format.");
           return;
         }
-        
+
         if (!ethers.isAddress(formData.payableAddress)) {
           addLog("Invalid payable company address. Please check the format.");
           return;
@@ -273,7 +261,7 @@ export default function FIDCDemoPage() {
                   senior spread: ${formData.seniorSpread / 100}%, 
                   fee: ${formData.fee / 100}%, 
                   grace period: ${formData.gracePeriod / (24 * 60 * 60)} days`);
-                  
+
           const result = await initializeFIDC(
             address!,
             formData.validatorAddress,
@@ -281,7 +269,7 @@ export default function FIDCDemoPage() {
             formData.fee,
             formData.annualYield,
             formData.gracePeriod,
-            formData.seniorSpread,
+            formData.seniorSpread
           );
 
           if (result.success && result.fidcId) {
@@ -312,8 +300,12 @@ export default function FIDCDemoPage() {
         }
 
         const { ethers } = await import("ethers");
-        if (address?.toLowerCase() !== formData.validatorAddress.toLowerCase()) {
-          addLog(`Warning: You should be connected with the validator wallet (${formData.validatorAddress}) to perform this action.`);
+        if (
+          address?.toLowerCase() !== formData.validatorAddress.toLowerCase()
+        ) {
+          addLog(
+            `Warning: You should be connected with the validator wallet (${formData.validatorAddress}) to perform this action.`
+          );
         }
 
         setProcessing(true);
@@ -362,7 +354,9 @@ export default function FIDCDemoPage() {
 
         const { ethers } = await import("ethers");
         if (address?.toLowerCase() !== formData.payableAddress.toLowerCase()) {
-          addLog(`Warning: You should be connected with the payable company wallet (${formData.payableAddress}) to perform this action.`);
+          addLog(
+            `Warning: You should be connected with the payable company wallet (${formData.payableAddress}) to perform this action.`
+          );
         }
 
         setProcessing(true);
@@ -385,7 +379,10 @@ export default function FIDCDemoPage() {
               const fidcDetails = await getFIDCDetails(fidcId);
               addLog(`FIDC Status: ${getStatusString(fidcDetails.status)}`);
             } catch (err) {
-              console.error("Error getting FIDC status:", err instanceof Error ? err.message : String(err));
+              console.error(
+                "Error getting FIDC status:",
+                err instanceof Error ? err.message : String(err)
+              );
             }
 
             setCurrentStep(4);
@@ -419,15 +416,19 @@ export default function FIDCDemoPage() {
           addLog("Invalid senior investor address. Please check the format.");
           return;
         }
-        
+
         if (!ethers.isAddress(formData.subInvestorAddress)) {
-          addLog("Invalid subordinated investor address. Please check the format.");
+          addLog(
+            "Invalid subordinated investor address. Please check the format."
+          );
           return;
         }
-        
+
         const fidcDetails = await getFIDCDetails(fidcId);
         if (address?.toLowerCase() !== fidcDetails.manager.toLowerCase()) {
-          addLog(`Warning: You should be connected with the manager wallet (${fidcDetails.manager}) to approve investors.`);
+          addLog(
+            `Warning: You should be connected with the manager wallet (${fidcDetails.manager}) to approve investors.`
+          );
           // We don't block, just warn in demo mode
         }
 
@@ -435,53 +436,59 @@ export default function FIDCDemoPage() {
         addLog("Approving investors...");
 
         try {
-          addLog(`Approving senior investor: ${formData.seniorInvestorAddress}`);
-          const seniorResult = await approveInvestor(formData.seniorInvestorAddress, 0, fidcId);
+          // Aprovar os investidores usando approveInvestor diretamente
+          // Esta função já está na interface FIDCContract
+          addLog(
+            `Approving senior investor: ${formData.seniorInvestorAddress}`
+          );
+
+          // Aprovar investidor senior (tipo 0)
+          const seniorResult = await approveInvestor(
+            formData.seniorInvestorAddress,
+            0,
+            fidcId
+          );
 
           if (seniorResult.success) {
             addLog("Senior investor approved successfully");
           }
 
-          addLog(`Approving subordinated investor: ${formData.subInvestorAddress}`);
-          const subResult = await approveInvestor(formData.subInvestorAddress, 1, fidcId);
+          // Aprovar investidor subordinado (tipo 1)
+          addLog(
+            `Approving subordinated investor: ${formData.subInvestorAddress}`
+          );
+          const subResult = await approveInvestor(
+            formData.subInvestorAddress,
+            1,
+            fidcId
+          );
 
           if (subResult.success) {
             addLog("Subordinated investor approved successfully");
           }
 
           // Financiar as carteiras dos investidores com DREX
-          addLog("Funding investor wallets with DREX tokens...");
-          
+          addLog("Funding investor wallets with tokens...");
+
           // Financiar carteira do investidor sênior
-          const seniorFundingAmount = (formData.seniorInvestAmount * 1.1).toString(); // 10% a mais para garantir
-          addLog(`Funding senior investor with ${seniorFundingAmount} DREX`);
-          const seniorFundingResult = await fundInvestorWallet(
-            formData.seniorInvestorAddress, 
+          const seniorFundingAmount = (
+            formData.seniorInvestAmount * 1.1
+          ).toString(); // 10% a mais para garantir
+          await fundInvestorWallet(
+            formData.seniorInvestorAddress,
             seniorFundingAmount
           );
-          
-          if (seniorFundingResult.success) {
-            addLog(`Senior investor wallet funded successfully`);
-          } else {
-            addLog(`Warning: Failed to fund senior investor wallet`);
-          }
-          
+
           // Financiar carteira do investidor subordinado
           const subFundingAmount = (formData.subInvestAmount * 1.1).toString(); // 10% a mais para garantir
-          addLog(`Funding subordinated investor with ${subFundingAmount} DREX`);
-          const subFundingResult = await fundInvestorWallet(
-            formData.subInvestorAddress, 
+          await fundInvestorWallet(
+            formData.subInvestorAddress,
             subFundingAmount
           );
-          
-          if (subFundingResult.success) {
-            addLog(`Subordinated investor wallet funded successfully`);
-          } else {
-            addLog(`Warning: Failed to fund subordinated investor wallet`);
-          }
 
           if (seniorResult.success && subResult.success) {
             setCurrentStep(5);
+            addLog("All investors approved and funded successfully!");
           } else {
             addLog(
               "Failed to approve one or more investors. Check console for details."
@@ -509,13 +516,16 @@ export default function FIDCDemoPage() {
           return;
         }
 
-        // Verificar se o endereço conectado é um dos investidores aprovados
-        const { ethers } = await import("ethers");
-        const isSeniorInvestor = address?.toLowerCase() === formData.seniorInvestorAddress.toLowerCase();
-        const isSubInvestor = address?.toLowerCase() === formData.subInvestorAddress.toLowerCase();
-        
+        const isSeniorInvestor =
+          address?.toLowerCase() ===
+          formData.seniorInvestorAddress.toLowerCase();
+        const isSubInvestor =
+          address?.toLowerCase() === formData.subInvestorAddress.toLowerCase();
+
         if (!isSeniorInvestor && !isSubInvestor) {
-          addLog(`Warning: You should be connected with one of the approved investor wallets:`);
+          addLog(
+            `Warning: You should be connected with one of the approved investor wallets:`
+          );
           addLog(`- Senior Investor: ${formData.seniorInvestorAddress}`);
           addLog(`- Subordinated Investor: ${formData.subInvestorAddress}`);
           // We don't block, just warn in demo mode
@@ -527,9 +537,9 @@ export default function FIDCDemoPage() {
         try {
           // Investimento Sênior
           addLog(
-            `Senior investor investing ${formData.seniorInvestAmount} DREX`
+            `Senior investor investing ${formData.seniorInvestAmount} Stable coin`
           );
-          
+
           // Verificar se estamos conectados como o investidor sênior
           let seniorResult: { success: boolean } = { success: false };
           if (isSeniorInvestor) {
@@ -538,7 +548,9 @@ export default function FIDCDemoPage() {
               formData.seniorInvestAmount.toString()
             );
           } else {
-            addLog("Warning: We're not connected as the senior investor. In production, this operation would fail.");
+            addLog(
+              "Warning: We're not connected as the senior investor. In production, this operation would fail."
+            );
             // Na demonstração, fingimos que o investimento foi bem-sucedido
             seniorResult = { success: true };
           }
@@ -548,7 +560,10 @@ export default function FIDCDemoPage() {
           }
 
           try {
-            const positions = await getInvestorPosition(formData.seniorInvestorAddress, fidcId);
+            const positions = await getInvestorPosition(
+              formData.seniorInvestorAddress,
+              fidcId
+            );
             const seniorInvestment = positions.investments.find(
               (inv) => inv.isSenior === true
             );
@@ -561,14 +576,17 @@ export default function FIDCDemoPage() {
               );
             }
           } catch (err) {
-            console.error("Error getting senior investment ID:", err instanceof Error ? err.message : String(err));
+            console.error(
+              "Error getting senior investment ID:",
+              err instanceof Error ? err.message : String(err)
+            );
           }
 
           // Investimento Subordinado
           addLog(
-            `Subordinated investor investing ${formData.subInvestAmount} DREX`
+            `Subordinated investor investing ${formData.subInvestAmount} Stable coin`
           );
-          
+
           // Verificar se estamos conectados como o investidor subordinado
           let subResult: { success: boolean } = { success: false };
           if (isSubInvestor) {
@@ -577,7 +595,9 @@ export default function FIDCDemoPage() {
               formData.subInvestAmount.toString()
             );
           } else {
-            addLog("Warning: We're not connected as the subordinated investor. In production, this operation would fail.");
+            addLog(
+              "Warning: We're not connected as the subordinated investor. In production, this operation would fail."
+            );
             // Na demonstração, fingimos que o investimento foi bem-sucedido
             subResult = { success: true };
           }
@@ -587,7 +607,10 @@ export default function FIDCDemoPage() {
           }
 
           try {
-            const positions = await getInvestorPosition(formData.subInvestorAddress, fidcId);
+            const positions = await getInvestorPosition(
+              formData.subInvestorAddress,
+              fidcId
+            );
             const subInvestment = positions.investments.find(
               (inv) => inv.isSenior === false
             );
@@ -602,14 +625,22 @@ export default function FIDCDemoPage() {
               );
             }
           } catch (err) {
-            console.error("Error getting subordinated investment ID:", err instanceof Error ? err.message : String(err));
+            console.error(
+              "Error getting subordinated investment ID:",
+              err instanceof Error ? err.message : String(err)
+            );
           }
 
           try {
             const fidcDetails = await getFIDCDetails(fidcId);
-            addLog(`Total invested in FIDC: ${fidcDetails.invested} DREX`);
+            addLog(
+              `Total invested in FIDC: ${fidcDetails.invested} Stable coin`
+            );
           } catch (err) {
-            console.error("Error getting total invested:", err instanceof Error ? err.message : String(err));
+            console.error(
+              "Error getting total invested:",
+              err instanceof Error ? err.message : String(err)
+            );
           }
 
           if (seniorResult.success && subResult.success) {
@@ -685,11 +716,16 @@ export default function FIDCDemoPage() {
 
         // Verificar se o endereço conectado é um dos investidores aprovados
         const { ethers } = await import("ethers");
-        const isSeniorInvestor = address?.toLowerCase() === formData.seniorInvestorAddress.toLowerCase();
-        const isSubInvestor = address?.toLowerCase() === formData.subInvestorAddress.toLowerCase();
-        
+        const isSeniorInvestor =
+          address?.toLowerCase() ===
+          formData.seniorInvestorAddress.toLowerCase();
+        const isSubInvestor =
+          address?.toLowerCase() === formData.subInvestorAddress.toLowerCase();
+
         if (!isSeniorInvestor && !isSubInvestor) {
-          addLog(`Warning: You should be connected with one of the approved investor wallets:`);
+          addLog(
+            `Warning: You should be connected with one of the approved investor wallets:`
+          );
           addLog(`- Senior Investor: ${formData.seniorInvestorAddress}`);
           addLog(`- Subordinated Investor: ${formData.subInvestorAddress}`);
           // We don't block, just warn in demo mode
@@ -710,14 +746,16 @@ export default function FIDCDemoPage() {
           const seniorTotal = seniorPrincipal + seniorNetYield;
 
           addLog("Senior investor redemption expected calculation:");
-          addLog(`Principal: ${seniorPrincipal.toFixed(2)} DREX`);
-          addLog(`Gross yield: ${seniorGrossYield.toFixed(2)} DREX`);
-          addLog(`Manager fee: ${seniorFee.toFixed(2)} DREX`);
-          addLog(`Net yield: ${seniorNetYield.toFixed(2)} DREX`);
-          addLog(`Total expected repayment: ${seniorTotal.toFixed(2)} DREX`);
+          addLog(`Principal: ${seniorPrincipal.toFixed(2)} Stable coin`);
+          addLog(`Gross yield: ${seniorGrossYield.toFixed(2)} Stable coin`);
+          addLog(`Manager fee: ${seniorFee.toFixed(2)} Stable coin`);
+          addLog(`Net yield: ${seniorNetYield.toFixed(2)} Stable coin`);
+          addLog(
+            `Total expected repayment: ${seniorTotal.toFixed(2)} Stable coin`
+          );
 
           addLog("Redeeming senior investment...");
-          
+
           // Verificar se estamos conectados como o investidor sênior
           let seniorResult: { success: boolean } = { success: false };
           if (isSeniorInvestor) {
@@ -727,7 +765,9 @@ export default function FIDCDemoPage() {
               formData.seniorInvestAmount.toString()
             );
           } else {
-            addLog("Warning: We're not connected as the senior investor. In production, this operation would fail.");
+            addLog(
+              "Warning: We're not connected as the senior investor. In production, this operation would fail."
+            );
             // Na demonstração, fingimos que o resgate foi bem-sucedido
             seniorResult = { success: true };
           }
@@ -744,14 +784,14 @@ export default function FIDCDemoPage() {
           const subTotal = subPrincipal + subNetYield;
 
           addLog("Subordinated investor redemption expected calculation:");
-          addLog(`Principal: ${subPrincipal.toFixed(2)} DREX`);
-          addLog(`Gross yield: ${subGrossYield.toFixed(2)} DREX`);
-          addLog(`Manager fee: ${subFee.toFixed(2)} DREX`);
-          addLog(`Net yield: ${subNetYield.toFixed(2)} DREX`);
-          addLog(`Total expected repayment: ${subTotal.toFixed(2)} DREX`);
+          addLog(`Principal: ${subPrincipal.toFixed(2)} Stablecoin`);
+          addLog(`Gross yield: ${subGrossYield.toFixed(2)} Stablecoin`);
+          addLog(`Manager fee: ${subFee.toFixed(2)} Stablecoin`);
+          addLog(`Net yield: ${subNetYield.toFixed(2)} Stablecoin`);
+          addLog(`Total expected repayment: ${subTotal.toFixed(2)} Stablecoin`);
 
           addLog("Redeeming subordinated investment...");
-          
+
           // Verificar se estamos conectados como o investidor subordinado
           let subResult: { success: boolean } = { success: false };
           if (isSubInvestor) {
@@ -761,7 +801,9 @@ export default function FIDCDemoPage() {
               formData.subInvestAmount.toString()
             );
           } else {
-            addLog("Warning: We're not connected as the subordinated investor. In production, this operation would fail.");
+            addLog(
+              "Warning: We're not connected as the subordinated investor. In production, this operation would fail."
+            );
             // Na demonstração, fingimos que o resgate foi bem-sucedido
             subResult = { success: true };
           }
@@ -836,16 +878,19 @@ export default function FIDCDemoPage() {
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
           <h2 className="text-xl font-semibold mb-4">FIDC Configuration</h2>
 
-          {/* Painel de Gerenciamento de Tokens DREX */}
+          {/* Painel de Gerenciamento de Tokens Stablecoin */}
           <div className="mb-6 p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded border border-yellow-200 dark:border-yellow-800">
-            <h3 className="font-semibold text-lg mb-2">DREX Token Management</h3>
+            <h3 className="font-semibold text-lg mb-2">
+              Stablecoin Token Management
+            </h3>
             <p className="text-sm text-gray-600 dark:text-gray-300 mb-3">
-              This section allows you to create and view DREX tokens for demonstration.
+              This section allows you to create and view Stablecoin tokens for
+              demonstration.
             </p>
-            
+
             <div className="mb-3">
               <label className="block text-sm font-medium mb-1">
-                DREX Amount to Mint
+                Stablecoin Amount to Mint
               </label>
               <div className="flex">
                 <input
@@ -861,15 +906,19 @@ export default function FIDCDemoPage() {
                       addLog("Please connect your wallet first");
                       return;
                     }
-                    
+
                     try {
                       setProcessing(true);
-                      addLog(`Minting ${mintAmount} DREX for ${address}`);
+                      addLog(`Minting ${mintAmount} Stablecoin for ${address}`);
                       await fundInvestorWallet(address, mintAmount);
                       addLog(`Mint completed successfully!`);
-                      updateDrexBalances();
+                      updateStablecoinBalances();
                     } catch (err) {
-                      addLog(`Error during mint: ${err instanceof Error ? err.message : String(err)}`);
+                      addLog(
+                        `Error during mint: ${
+                          err instanceof Error ? err.message : String(err)
+                        }`
+                      );
                     } finally {
                       setProcessing(false);
                     }
@@ -881,38 +930,53 @@ export default function FIDCDemoPage() {
                 </button>
               </div>
             </div>
-            
+
             <div className="mb-2">
               <div className="flex justify-between items-center mb-1">
-                <span className="text-sm font-medium">DREX Balances:</span>
+                <span className="text-sm font-medium">
+                  Stablecoin Balances:
+                </span>
                 <button
-                  onClick={updateDrexBalances}
+                  onClick={updateStablecoinBalances}
                   className="text-xs text-indigo-600 hover:text-indigo-800"
                   disabled={processing || isProcessing}
                 >
                   🔄 Refresh
                 </button>
               </div>
-              
+
               <div className="space-y-1 max-h-32 overflow-y-auto text-sm border rounded p-2 bg-white dark:bg-gray-700">
                 {Object.entries(walletBalances).length > 0 ? (
                   Object.entries(walletBalances).map(([addr, balance]) => {
                     // Determine wallet type for display
                     let role = "";
                     if (addr === address?.toLowerCase()) role = "You";
-                    else if (addr === formData.validatorAddress?.toLowerCase()) role = "Validator";
-                    else if (addr === formData.payableAddress?.toLowerCase()) role = "Payable";
-                    else if (addr === formData.seniorInvestorAddress?.toLowerCase()) role = "Sr. Investor";
-                    else if (addr === formData.subInvestorAddress?.toLowerCase()) role = "Sub. Investor";
-                    
-                    const shortAddr = `${addr.substring(0, 6)}...${addr.substring(addr.length - 4)}`;
-                    
+                    else if (addr === formData.validatorAddress?.toLowerCase())
+                      role = "Validator";
+                    else if (addr === formData.payableAddress?.toLowerCase())
+                      role = "Payable";
+                    else if (
+                      addr === formData.seniorInvestorAddress?.toLowerCase()
+                    )
+                      role = "Sr. Investor";
+                    else if (
+                      addr === formData.subInvestorAddress?.toLowerCase()
+                    )
+                      role = "Sub. Investor";
+
+                    const shortAddr = `${addr.substring(
+                      0,
+                      6
+                    )}...${addr.substring(addr.length - 4)}`;
+
                     return (
                       <div key={addr} className="flex justify-between">
                         <span className="font-mono">
                           {role ? `${role} (${shortAddr})` : shortAddr}:
                         </span>
-                        <span className="font-semibold">{balance} DREX</span>
+                        <span className="font-semibold">
+                          {balance} Stablecoin
+                        </span>
                       </div>
                     );
                   })
@@ -921,20 +985,24 @@ export default function FIDCDemoPage() {
                 )}
               </div>
             </div>
-            
+
             <div className="grid grid-cols-2 gap-2 mt-3">
               <button
                 onClick={async () => {
                   if (!isConnected) return;
-                  
+
                   try {
                     setProcessing(true);
                     addLog("Funding validator wallet...");
                     await fundInvestorWallet(formData.validatorAddress, "1000");
                     addLog("Validator wallet funded!");
-                    updateDrexBalances();
+                    updateStablecoinBalances();
                   } catch (err) {
-                    addLog(`Error: ${err instanceof Error ? err.message : String(err)}`);
+                    addLog(
+                      `Error: ${
+                        err instanceof Error ? err.message : String(err)
+                      }`
+                    );
                   } finally {
                     setProcessing(false);
                   }
@@ -944,19 +1012,26 @@ export default function FIDCDemoPage() {
               >
                 Fund Validator
               </button>
-              
+
               <button
                 onClick={async () => {
                   if (!isConnected) return;
-                  
+
                   try {
                     setProcessing(true);
                     addLog("Funding payable company wallet...");
-                    await fundInvestorWallet(formData.payableAddress, formData.collateralAmount.toString());
+                    await fundInvestorWallet(
+                      formData.payableAddress,
+                      formData.collateralAmount.toString()
+                    );
                     addLog("Payable wallet funded!");
-                    updateDrexBalances();
+                    updateStablecoinBalances();
                   } catch (err) {
-                    addLog(`Error: ${err instanceof Error ? err.message : String(err)}`);
+                    addLog(
+                      `Error: ${
+                        err instanceof Error ? err.message : String(err)
+                      }`
+                    );
                   } finally {
                     setProcessing(false);
                   }
@@ -968,7 +1043,7 @@ export default function FIDCDemoPage() {
               </button>
             </div>
           </div>
-          
+
           <div className="my-4 border-b border-gray-200"></div>
 
           <div className="space-y-4">
@@ -978,17 +1053,19 @@ export default function FIDCDemoPage() {
               </label>
               <input
                 type="text"
-                value={address || ''}
+                value={address || ""}
                 disabled={true}
                 className="w-full p-2 border rounded bg-blue-50 border-blue-300"
                 placeholder="0x..."
               />
               <p className="text-sm mt-1 flex justify-between">
-                <span className="text-gray-500">Endereço do gestor (sua carteira conectada)</span>
+                <span className="text-gray-500">
+                  Endereço do gestor (sua carteira conectada)
+                </span>
                 <span className="text-blue-600 font-medium">Você</span>
               </p>
             </div>
-            
+
             <div>
               <label className="block text-sm font-medium mb-1">
                 Validador (Endereço)
@@ -997,21 +1074,27 @@ export default function FIDCDemoPage() {
                 type="text"
                 name="validatorAddress"
                 value={formData.validatorAddress}
-                onChange={(e) => setFormData({...formData, validatorAddress: e.target.value})}
+                onChange={(e) =>
+                  setFormData({ ...formData, validatorAddress: e.target.value })
+                }
                 disabled={currentStep > 0}
                 className={`w-full p-2 border rounded ${
-                  formData.validatorAddress === address ? 'bg-blue-50 border-blue-300' : ''
+                  formData.validatorAddress === address
+                    ? "bg-blue-50 border-blue-300"
+                    : ""
                 }`}
                 placeholder="0x..."
               />
               <p className="text-sm mt-1 flex justify-between">
-                <span className="text-gray-500">Endereço do validador de emissão</span>
+                <span className="text-gray-500">
+                  Endereço do validador de emissão
+                </span>
                 {formData.validatorAddress === address && (
                   <span className="text-blue-600 font-medium">Você</span>
                 )}
               </p>
             </div>
-            
+
             <div>
               <label className="block text-sm font-medium mb-1">
                 Pagador (Endereço)
@@ -1020,21 +1103,27 @@ export default function FIDCDemoPage() {
                 type="text"
                 name="payableAddress"
                 value={formData.payableAddress}
-                onChange={(e) => setFormData({...formData, payableAddress: e.target.value})}
+                onChange={(e) =>
+                  setFormData({ ...formData, payableAddress: e.target.value })
+                }
                 disabled={currentStep > 0}
                 className={`w-full p-2 border rounded ${
-                  formData.payableAddress === address ? 'bg-blue-50 border-blue-300' : ''
+                  formData.payableAddress === address
+                    ? "bg-blue-50 border-blue-300"
+                    : ""
                 }`}
                 placeholder="0x..."
               />
               <p className="text-sm mt-1 flex justify-between">
-                <span className="text-gray-500">Endereço da empresa pagadora</span>
+                <span className="text-gray-500">
+                  Endereço da empresa pagadora
+                </span>
                 {formData.payableAddress === address && (
                   <span className="text-blue-600 font-medium">Você</span>
                 )}
               </p>
             </div>
-            
+
             <div>
               <label className="block text-sm font-medium mb-1">
                 Investidor Sênior (Endereço)
@@ -1043,10 +1132,17 @@ export default function FIDCDemoPage() {
                 type="text"
                 name="seniorInvestorAddress"
                 value={formData.seniorInvestorAddress}
-                onChange={(e) => setFormData({...formData, seniorInvestorAddress: e.target.value})}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    seniorInvestorAddress: e.target.value,
+                  })
+                }
                 disabled={currentStep > 3}
                 className={`w-full p-2 border rounded ${
-                  formData.seniorInvestorAddress === address ? 'bg-blue-50 border-blue-300' : ''
+                  formData.seniorInvestorAddress === address
+                    ? "bg-blue-50 border-blue-300"
+                    : ""
                 }`}
                 placeholder="0x..."
               />
@@ -1057,7 +1153,7 @@ export default function FIDCDemoPage() {
                 )}
               </p>
             </div>
-            
+
             <div>
               <label className="block text-sm font-medium mb-1">
                 Investidor Subordinado (Endereço)
@@ -1066,10 +1162,17 @@ export default function FIDCDemoPage() {
                 type="text"
                 name="subInvestorAddress"
                 value={formData.subInvestorAddress}
-                onChange={(e) => setFormData({...formData, subInvestorAddress: e.target.value})}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    subInvestorAddress: e.target.value,
+                  })
+                }
                 disabled={currentStep > 3}
                 className={`w-full p-2 border rounded ${
-                  formData.subInvestorAddress === address ? 'bg-blue-50 border-blue-300' : ''
+                  formData.subInvestorAddress === address
+                    ? "bg-blue-50 border-blue-300"
+                    : ""
                 }`}
                 placeholder="0x..."
               />
@@ -1082,7 +1185,7 @@ export default function FIDCDemoPage() {
             </div>
 
             <div className="my-4 border-b border-gray-200"></div>
-            
+
             <div>
               <label className="block text-sm font-medium mb-1">
                 Annual Yield (BPS)
@@ -1156,7 +1259,7 @@ export default function FIDCDemoPage() {
 
             <div>
               <label className="block text-sm font-medium mb-1">
-                Collateral Amount (DREX)
+                Collateral Amount (Stablecoin)
               </label>
               <input
                 type="number"
@@ -1170,7 +1273,7 @@ export default function FIDCDemoPage() {
 
             <div>
               <label className="block text-sm font-medium mb-1">
-                Senior Investment (DREX)
+                Senior Investment (Stablecoin)
               </label>
               <input
                 type="number"
@@ -1184,7 +1287,7 @@ export default function FIDCDemoPage() {
 
             <div>
               <label className="block text-sm font-medium mb-1">
-                Subordinated Investment (DREX)
+                Subordinated Investment (Stablecoin)
               </label>
               <input
                 type="number"
@@ -1217,30 +1320,50 @@ export default function FIDCDemoPage() {
               <p className="text-sm">
                 Status: {currentStep >= 2 ? "ACTIVE" : "PENDING"}
               </p>
-              
+
               {currentStep >= 3 && (
                 <div className="mt-3">
                   <button
                     onClick={async () => {
                       if (!fidcId) return;
-                      
+
                       setProcessing(true);
                       addLog("Manually funding investor wallets...");
-                      
+
                       try {
                         // Financiar carteira do investidor sênior
-                        const seniorAmount = (formData.seniorInvestAmount * 1.5).toString();
-                        addLog(`Enviando ${seniorAmount} DREX para investidor sênior`);
-                        await fundInvestorWallet(formData.seniorInvestorAddress, seniorAmount);
-                        
+                        const seniorAmount = (
+                          formData.seniorInvestAmount * 1.5
+                        ).toString();
+                        addLog(
+                          `Enviando ${seniorAmount} Stablecoin para investidor sênior`
+                        );
+                        await fundInvestorWallet(
+                          formData.seniorInvestorAddress,
+                          seniorAmount
+                        );
+
                         // Financiar carteira do investidor subordinado
-                        const subAmount = (formData.subInvestAmount * 1.5).toString();
-                        addLog(`Enviando ${subAmount} DREX para investidor subordinado`);
-                        await fundInvestorWallet(formData.subInvestorAddress, subAmount);
-                        
+                        const subAmount = (
+                          formData.subInvestAmount * 1.5
+                        ).toString();
+                        addLog(
+                          `Enviando ${subAmount} Stablecoin para investidor subordinado`
+                        );
+                        await fundInvestorWallet(
+                          formData.subInvestorAddress,
+                          subAmount
+                        );
+
                         addLog("Wallets funded successfully!");
                       } catch (error) {
-                        addLog(`Error funding wallets: ${error instanceof Error ? error.message : String(error)}`);
+                        addLog(
+                          `Error funding wallets: ${
+                            error instanceof Error
+                              ? error.message
+                              : String(error)
+                          }`
+                        );
                       } finally {
                         setProcessing(false);
                       }
@@ -1351,28 +1474,38 @@ export default function FIDCDemoPage() {
         {fidcId && currentStep >= 3 && (
           <div className="mb-6 p-4 bg-gray-100 dark:bg-gray-700 rounded-lg">
             <h3 className="text-lg font-medium mb-2">Administrative Actions</h3>
-            <p className="mb-3">The FIDC manager can perform these actions at any time:</p>
+            <p className="mb-3">
+              The FIDC manager can perform these actions at any time:
+            </p>
             <div className="flex space-x-4">
               <button
                 onClick={async () => {
                   if (!fidcId) return;
-                  
+
                   setProcessing(true);
                   addLog("Stopping FIDC...");
-                  
+
                   try {
                     const result = await stopFIDC(fidcId);
                     if (result.success) {
-                      addLog(`FIDC ${fidcId} stopped successfully. Status now is STOPPED.`);
-                      
+                      addLog(
+                        `FIDC ${fidcId} stopped successfully. Status now is STOPPED.`
+                      );
+
                       // Atualizar detalhes após a operação
                       const details = await getFIDCDetails(fidcId);
-                      addLog(`Status confirmed: ${getStatusString(details.status)}`);
+                      addLog(
+                        `Status confirmed: ${getStatusString(details.status)}`
+                      );
                     } else {
                       addLog("Failed to stop FIDC.");
                     }
                   } catch (error) {
-                    addLog(`Error stopping FIDC: ${error instanceof Error ? error.message : String(error)}`);
+                    addLog(
+                      `Error stopping FIDC: ${
+                        error instanceof Error ? error.message : String(error)
+                      }`
+                    );
                   } finally {
                     setProcessing(false);
                   }
@@ -1382,27 +1515,35 @@ export default function FIDCDemoPage() {
               >
                 Stop FIDC
               </button>
-              
+
               <button
                 onClick={async () => {
                   if (!fidcId) return;
-                  
+
                   setProcessing(true);
                   addLog("Starting liquidation of FIDC...");
-                  
+
                   try {
                     const result = await initiateLiquidation(fidcId);
                     if (result.success) {
-                      addLog(`Liquidation of FIDC ${fidcId} started successfully. Status now is LIQUIDATED.`);
-                      
+                      addLog(
+                        `Liquidation of FIDC ${fidcId} started successfully. Status now is LIQUIDATED.`
+                      );
+
                       // Atualizar detalhes após a operação
                       const details = await getFIDCDetails(fidcId);
-                      addLog(`Status confirmed: ${getStatusString(details.status)}`);
+                      addLog(
+                        `Status confirmed: ${getStatusString(details.status)}`
+                      );
                     } else {
                       addLog("Failed to start liquidation of FIDC.");
                     }
                   } catch (error) {
-                    addLog(`Error starting liquidation: ${error instanceof Error ? error.message : String(error)}`);
+                    addLog(
+                      `Error starting liquidation: ${
+                        error instanceof Error ? error.message : String(error)
+                      }`
+                    );
                   } finally {
                     setProcessing(false);
                   }
