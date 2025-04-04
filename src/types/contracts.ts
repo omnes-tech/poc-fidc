@@ -16,31 +16,35 @@ export interface FIDCContract extends BaseContract {
     _fidcId: number | bigint,
     _scheduleAmount: bigint,
     _collateralAmount: bigint,
-    _isApproved: boolean
+    _isApproved: boolean,
+    overrides?: any
   ): Promise<any>;
 
   approvedEmissionPayable(
     _fidcId: number | bigint,
     _amount: bigint,
-    _isApproved: boolean
+    _isApproved: boolean,
+    overrides?: any
   ): Promise<any>;
 
   approveInvestor(
     _investor: string[],
     _type: number,
-    _fidcId: number | bigint
+    _fidcId: number | bigint,
+    overrides?: any
   ): Promise<any>;
 
   invest(
     _fidcId: number | bigint,
-    _amount: bigint,
+    _amount: bigint | number,
     overrides?: any
   ): Promise<any>;
 
   redeem(
     _fidcId: number | bigint,
     _investmentId: number | bigint,
-    _amount: bigint
+    _amount: bigint,
+    overrides?: any
   ): Promise<any>;
 
   fidcs(
@@ -61,6 +65,7 @@ export interface FIDCContract extends BaseContract {
     gracePeriod: bigint;
     seniorSpread: bigint;
     vault: string;
+    overrides?: any
   }>;
 
   getInvestorPosition(
@@ -81,11 +86,13 @@ export interface FIDCContract extends BaseContract {
   }>;
 
   stopFIDC(
-    _fidcId: number | bigint
+    _fidcId: number | bigint,
+    overrides?: any
   ): Promise<any>;
 
   initiateLiquidation(
-    _fidcId: number | bigint
+    _fidcId: number | bigint,
+    overrides?: any
   ): Promise<any>;
 
   setRole(
@@ -95,19 +102,21 @@ export interface FIDCContract extends BaseContract {
 
   redeemAll(
     _fidcId: number | bigint,
-    _investmentId: number | bigint
+    _investmentId: number | bigint,
+    overrides?: any
   ): Promise<any>;
 
   redeemAllManager(
     _fidcId: number | bigint,
-    _investors: string[]
+    _investors: string[],
+    overrides?: any
   ): Promise<any>;
 }
 
 export interface ERC20Contract extends BaseContract {
   approve(
     spender: string,
-    amount: bigint,
+    amount: bigint | number,
     overrides?: any
   ): Promise<any>;
 
@@ -119,4 +128,16 @@ export interface ERC20Contract extends BaseContract {
   balanceOf(
     account: string
   ): Promise<bigint>;
+
+  approve(
+    spender: string,
+    amount: bigint,
+    overrides?: any
+  ): Promise<any>;
+
+  mint(
+    to: string,
+    amount: bigint,
+    overrides?: any
+  ): Promise<any>;
 } 

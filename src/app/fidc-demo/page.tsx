@@ -298,8 +298,6 @@ export default function FIDCDemoPage() {
           addLog("Please connect your wallet and initialize FIDC first");
           return;
         }
-
-        const { ethers } = await import("ethers");
         if (
           address?.toLowerCase() !== formData.validatorAddress.toLowerCase()
         ) {
@@ -351,8 +349,6 @@ export default function FIDCDemoPage() {
           );
           return;
         }
-
-        const { ethers } = await import("ethers");
         if (address?.toLowerCase() !== formData.payableAddress.toLowerCase()) {
           addLog(
             `Warning: You should be connected with the payable company wallet (${formData.payableAddress}) to perform this action.`
@@ -410,8 +406,6 @@ export default function FIDCDemoPage() {
           );
           return;
         }
-
-        const { ethers } = await import("ethers");
         if (!ethers.isAddress(formData.seniorInvestorAddress)) {
           addLog("Invalid senior investor address. Please check the format.");
           return;
@@ -970,12 +964,12 @@ export default function FIDCDemoPage() {
                     )}...${addr.substring(addr.length - 4)}`;
 
                     return (
-                      <div key={addr} className="flex justify-between">
+                      <div key={addr} className="flex w-full justify-between">
                         <span className="font-mono">
                           {role ? `${role} (${shortAddr})` : shortAddr}:
                         </span>
                         <span className="font-semibold">
-                          {balance} Stablecoin
+                          {Number(balance).toFixed(2)} Stablecoin
                         </span>
                       </div>
                     );
@@ -1259,7 +1253,7 @@ export default function FIDCDemoPage() {
 
             <div>
               <label className="block text-sm font-medium mb-1">
-                Collateral Amount (Stablecoin)
+                Total Emission (Stablecoin)
               </label>
               <input
                 type="number"
