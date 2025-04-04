@@ -33,7 +33,8 @@ export interface FIDCContract extends BaseContract {
 
   invest(
     _fidcId: number | bigint,
-    _amount: bigint
+    _amount: bigint,
+    overrides?: any
   ): Promise<any>;
 
   redeem(
@@ -106,7 +107,8 @@ export interface FIDCContract extends BaseContract {
 export interface ERC20Contract extends BaseContract {
   approve(
     spender: string,
-    amount: bigint
+    amount: bigint,
+    overrides?: any
   ): Promise<any>;
 
   transfer(

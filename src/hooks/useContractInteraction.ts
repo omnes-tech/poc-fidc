@@ -16,27 +16,42 @@ export function useContractInteraction() {
 
   const gasLimit = 3000000;
 
-  const getContracts = useCallback(async () => {
-    if (!walletClient || !isConnected || !address) {
+  const getContracts = useCallback(async (useDemoWallet = false) => {
+    if (!useDemoWallet && (!walletClient || !isConnected || !address)) {
       throw new Error("Wallet not connected");
     }
-
-    const provider = new ethers.BrowserProvider(window.ethereum);
-    const signer = await provider.getSigner();
-
+  
+    let provider;
+    let signer;
+  
+    if (useDemoWallet) {
+      // Usar um provedor de testnet pública - Polygon Mumbai Testnet
+      provider = new ethers.JsonRpcProvider("https://ethereum-holesky-rpc.publicnode.com");
+      
+      // Chave privada de uma conta de teste (sem valor real)
+      // Substitua por uma chave de teste que você controla
+      const demoPrivateKey = "a92e4c875f24bb830164205fc55f567dd04f6cea7b64411a7f0d781d29095c2b";
+      signer = new ethers.Wallet(demoPrivateKey, provider);
+      
+      console.log("Usando conta de demonstração na testnet:", signer.address);
+    } else {
+      provider = new ethers.BrowserProvider(window.ethereum);
+      signer = await provider.getSigner();
+    }
+  
     const fidcContract = new ethers.Contract(
       FIDC_Management_address,
       fidc_abi,
       signer
     ) as unknown as FIDCContract;
-
+  
     const drexContract = new ethers.Contract(
       ERC20Mock_address,
       erc20_abi,
       signer
     ) as unknown as ERC20Contract;
-
-    return { fidcContract, drexContract, signer };
+  
+    return { fidcContract, drexContract, signer, provider };
   }, [walletClient, isConnected, address]);
 
   const initializeFIDC = useCallback(
@@ -472,11 +487,12 @@ export function useContractInteraction() {
   );
 
   const approveInvestor = useCallback(
-    async (investor: string, type: number, fidcId: number) => {
+    async (investor: string, type: number, fidcId: number, useDemoWallet = false) => {
       setIsProcessing(true);
       setError(null);
 
       try {
+        const { fidcContract } = await getContracts(useDemoWallet);
         const provider = new ethers.BrowserProvider(window.ethereum);
         const signer = await provider.getSigner();
 
@@ -507,17 +523,17 @@ export function useContractInteraction() {
   );
 
   const invest = useCallback(
-    async (fidcId: number, amount: string) => {
+    async (fidcId: number, amount: string, useDemoWallet = false) => {
       setIsProcessing(true);
       setError(null);
 
       try {
-        const { fidcContract } = await getContracts();
-        const provider = new ethers.BrowserProvider(window.ethereum);
-        const signer = await provider.getSigner();
-
+        const { fidcContract, drexContract, signer } = await getContracts(useDemoWallet);
+        
+        const currentAddress = useDemoWallet ? signer.address : address;
+        
         const investorPosition = await fidcContract.getInvestorPosition(
-          address!,
+          currentAddress!,
           fidcId
         );
         const isSenior = investorPosition.investments.some(
@@ -527,72 +543,34 @@ export function useContractInteraction() {
         const fidcDetails = await fidcContract.fidcs(fidcId);
         const totalInvested = fidcDetails.invested;
 
-        const allPositions = await fidcContract.getInvestorPosition(
-          address!,
-          fidcId
-        );
         let seniorInvested = BigInt(0);
-
-        for (const investment of allPositions.investments) {
+        for (const investment of investorPosition.investments) {
           if (investment.isSenior) {
             seniorInvested += investment.amount;
           }
         }
 
-        if (!isSenior) {
-          const amountBigInt = ethers.parseEther(amount);
-          const newTotalInvested = totalInvested + amountBigInt;
-          const MIN_SENIOR_RATIO = 5000;
-
-          const seniorRatioBps =
-            (seniorInvested * BigInt(10000)) / newTotalInvested;
-
-          /* if (seniorRatioBps < BigInt(MIN_SENIOR_RATIO)) {
-            setError(
-              `Proporção mínima de investimento sênior não atingida. Proporção atual: ${
-                Number(seniorRatioBps) / 100
-              }%. Mínimo necessário: ${MIN_SENIOR_RATIO / 100}%`
-            );
-            return { success: false, error: "Senior ratio too low" };
-          } */
-        }
-
         const amountBigInt = ethers.parseEther(amount);
 
-        const erc20Contract = new ethers.Contract(
-          ERC20Mock_address,
-          erc20_abi,
-          signer
-        );
-
+        // Aprovar o token ERC20 para ser usado pelo contrato FIDC
+        console.log(`Aprovando ${amount} Stablecoin para uso pelo contrato FIDC`);
         const approveGasLimit = 3000000;
-        console.log(
-          `Usando limite de gás fixo para approve: ${approveGasLimit.toLocaleString()} unidades`
-        );
-
-        const approveTx = await erc20Contract.approve(
+        
+        const approveTx = await drexContract.approve(
           FIDC_Management_address,
           amountBigInt,
           { gasLimit: approveGasLimit }
         );
         await approveTx.wait();
+        console.log("Aprovação concluída");
 
+        // Fazer o investimento
         const investGasLimit = 3000000;
-        console.log(
-          `Usando limite de gás fixo para investimento: ${investGasLimit.toLocaleString()} unidades`
-        );
-
-        console.log(`Investindo ${amount} DREX no FIDC ID: ${fidcId}`);
-        console.log(`Investidor: ${address}`);
+        console.log(`Investindo ${amount} Stablecoin no FIDC ID: ${fidcId}`);
+        console.log(`Investidor: ${currentAddress}`);
         console.log(`Tipo: ${isSenior ? "Sênior" : "Subordinado"}`);
 
-        const contract = new ethers.Contract(
-          FIDC_Management_address,
-          fidc_abi,
-          signer
-        );
-
-        const tx = await contract.invest(fidcId, amountBigInt, {
+        const tx = await fidcContract.invest(fidcId, amountBigInt, {
           gasLimit: investGasLimit,
         });
         setTxHash(tx.hash);
@@ -658,18 +636,17 @@ export function useContractInteraction() {
   );
 
   const redeemAll = useCallback(
-    async (fidcId: number, investmentId: number) => {
+    async (fidcId: number, investmentId: number, useDemoWallet = false) => {
       setIsProcessing(true);
       setError(null);
 
       try {
-        const provider = new ethers.BrowserProvider(window.ethereum);
-        const signer = await provider.getSigner();
+        const { signer } = await getContracts(useDemoWallet);
 
         console.log(`\n=== RESGATANDO TODO O INVESTIMENTO ===`);
         console.log(`FIDC ID: ${fidcId}`);
         console.log(`Investment ID: ${investmentId}`);
-        console.log(`Investidor: ${address}`);
+        console.log(`Investidor: ${signer.address}`);
         console.log(`===========================\n`);
 
         const contract = new ethers.Contract(
@@ -694,16 +671,16 @@ export function useContractInteraction() {
         setIsProcessing(false);
       }
     },
-    [address]
+    [getContracts, address]
   );
 
   const redeemAllManager = useCallback(
-    async (fidcId: number, investors: string[]) => {
+    async (fidcId: number, investors: string[], useDemoWallet = false) => {
       setIsProcessing(true);
       setError(null);
 
       try {
-        const { fidcContract } = await getContracts();
+        const { fidcContract } = await getContracts(useDemoWallet);
         const provider = new ethers.BrowserProvider(window.ethereum);
         const signer = await provider.getSigner();
 
@@ -745,9 +722,9 @@ export function useContractInteraction() {
   );
 
   const getFIDCDetails = useCallback(
-    async (fidcId: number) => {
+    async (fidcId: number, useDemoWallet = false) => {
       try {
-        const { fidcContract } = await getContracts();
+        const { fidcContract } = await getContracts(useDemoWallet);
         const fidc = await fidcContract.fidcs(fidcId);
 
         return {
@@ -802,22 +779,20 @@ export function useContractInteraction() {
   );
 
   const fundInvestorWallet = useCallback(
-    async (recipient: string, amount: string) => {
+    async (recipient: string, amount: string, useDemoWallet = false) => {
       setIsProcessing(true);
       setError(null);
 
       try {
-        const { drexContract } = await getContracts();
+        const { drexContract } = await getContracts(useDemoWallet);
 
         const currentBalance = await drexContract.balanceOf(recipient);
         console.log(
-          `Saldo atual de ${recipient}: ${ethers.formatEther(
-            currentBalance
-          )} DREX`
+          `Saldo atual de ${recipient}: ${ethers.formatEther(currentBalance)} Stablecoin`
         );
 
         const drexContractAny = drexContract as any;
-        console.log(`Realizando mint de ${amount} DREX para ${recipient}`);
+        console.log(`Realizando mint de ${amount} Stablecoin para ${recipient}`);
         const tx = await drexContractAny.mint(
           recipient,
           ethers.parseEther(amount)
@@ -827,7 +802,7 @@ export function useContractInteraction() {
 
         const newBalance = await drexContract.balanceOf(recipient);
         console.log(
-          `Novo saldo de ${recipient}: ${ethers.formatEther(newBalance)} DREX`
+          `Novo saldo de ${recipient}: ${ethers.formatEther(newBalance)} Stablecoin`
         );
 
         return { success: true };

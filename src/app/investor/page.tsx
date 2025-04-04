@@ -7,9 +7,15 @@ import { ethers } from "ethers";
 import Link from "next/link";
 
 const BPS_DENOMINATOR = 10000;
+const DEMO_INVESTOR_ADDRESS = "0xF64749A9D8e4e4F33c9343e63797D57B80FBefd0";
 
 export default function InvestorPage() {
-  const { address, isConnected } = useAccount();
+  const { address: walletAddress, isConnected: isWalletConnected } =
+    useAccount();
+  const [useDemoAccount, setUseDemoAccount] = useState(false);
+  const [address, setAddress] = useState<string | undefined>(undefined);
+  const [isConnected, setIsConnected] = useState(false);
+
   const {
     isProcessing,
     txHash,
@@ -25,15 +31,17 @@ export default function InvestorPage() {
   } = useContractInteraction();
 
   const [processing, setProcessing] = useState(false);
-  const [fidcId, setFidcId] = useState<number>(1); // Default FIDC ID
+  const [fidcId, setFidcId] = useState<number>(1);
   const [logs, setLogs] = useState<string[]>([]);
-  const [investments, setInvestments] = useState<Array<{
-    investmentId: number;
-    amount: string;
-    investmentDate: Date;
-    yieldStartTime: Date;
-    isSenior: boolean;
-  }>>([]);
+  const [investments, setInvestments] = useState<
+    Array<{
+      investmentId: number;
+      amount: string;
+      investmentDate: Date;
+      yieldStartTime: Date;
+      isSenior: boolean;
+    }>
+  >([]);
   const [fidcDetails, setFidcDetails] = useState<any>(null);
   const [walletBalance, setWalletBalance] = useState<string>("0");
   const [inputs, setInputs] = useState({
@@ -43,27 +51,37 @@ export default function InvestorPage() {
     isSenior: true,
   });
 
-  // Carregar detalhes do FIDC e investimentos do usuário quando conectado
+  useEffect(() => {
+    if (useDemoAccount) {
+      setAddress(DEMO_INVESTOR_ADDRESS);
+      setIsConnected(true);
+      addLog("Usando conta de demonstração: " + DEMO_INVESTOR_ADDRESS);
+    } else {
+      setAddress(walletAddress);
+      setIsConnected(isWalletConnected);
+    }
+  }, [walletAddress, isWalletConnected, useDemoAccount]);
+
   useEffect(() => {
     const loadData = async () => {
       if (isConnected && address && fidcId) {
         try {
           addLog("Conectado. Carregando dados...");
-          console.log("Connected wallet:", address);
-          
-          // Pequeno delay para garantir que a conexão da carteira seja totalmente estabelecida
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          
+          console.log("Connected address:", address);
           await loadFIDCDetails();
           await loadInvestments();
           await checkBalance();
         } catch (err) {
           console.error("Error loading data:", err);
-          addLog(`Erro carregando dados iniciais: ${err instanceof Error ? err.message : String(err)}`);
+          addLog(
+            `Erro carregando dados iniciais: ${
+              err instanceof Error ? err.message : String(err)
+            }`
+          );
         }
       }
     };
-    
+
     loadData();
   }, [isConnected, address, fidcId]);
 
@@ -79,6 +97,50 @@ export default function InvestorPage() {
     }
   }, [txHash]);
 
+  useEffect(() => {
+    if (useDemoAccount) {
+      setFidcDetails({
+        manager: "0x1234...5678",
+        validator: "0xabcd...efgh",
+        payableAddress: "0x9876...5432",
+        fee: 500, 
+        amount: "1000",
+        invested: "750",
+        valid: true,
+        status: 1, 
+        annualYield: 1000,
+        gracePeriod: 2592000, 
+        seniorSpread: 300, 
+      });
+      setInvestments([
+        {
+          investmentId: 1,
+          amount: "250",
+          investmentDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // 30 dias atrás
+          yieldStartTime: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+          isSenior: true
+        },
+        {
+          investmentId: 2,
+          amount: "100",
+          investmentDate: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000), // 15 dias atrás
+          yieldStartTime: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000),
+          isSenior: false
+        }
+      ]);
+      
+      setWalletBalance("500");
+      
+      setInputs(prev => ({
+        ...prev,
+        investmentId: 1,
+        redeemAmount: "250"
+      }));
+      
+      addLog("Conta de demonstração carregada com dados simulados");
+    }
+  }, [useDemoAccount]);
+
   const addLog = (message: string) => {
     setLogs((prev) => [
       ...prev,
@@ -88,10 +150,12 @@ export default function InvestorPage() {
 
   const loadFIDCDetails = async () => {
     if (!isConnected || !address) {
-      addLog("Carteira não conectada. Não é possível carregar detalhes do FIDC.");
+      addLog("Conta não conectada. Não é possível carregar detalhes do FIDC.");
       return;
     }
-    
+
+    if (useDemoAccount) return;
+
     try {
       console.log("Loading FIDC details for ID:", fidcId);
       console.log("Connected with address:", address);
@@ -114,30 +178,38 @@ export default function InvestorPage() {
 
   const loadInvestments = async () => {
     if (!address) return;
-    
+    if (useDemoAccount) return;
+
     try {
       const position = await getInvestorPosition(address, fidcId);
       setInvestments(position.investments);
-      
+
       if (position.investments.length > 0) {
         setInputs((prev) => ({
           ...prev,
           investmentId: position.investments[0].investmentId,
           redeemAmount: position.investments[0].amount,
         }));
-        
+
         addLog(`Found ${position.investments.length} investments`);
       } else {
         addLog("No active investments found");
       }
     } catch (err) {
-      addLog(`Failed to load investments: ${err instanceof Error ? err.message : String(err)}`);
+      addLog(
+        `Failed to load investments: ${
+          err instanceof Error ? err.message : String(err)
+        }`
+      );
     }
   };
 
   const checkBalance = async () => {
     if (!address) return;
     
+    // Se estiver usando a conta de demonstração, o saldo já é carregado no useEffect
+    if (useDemoAccount) return;
+
     try {
       const { drexContract } = await getContracts();
       const balance = await drexContract.balanceOf(address);
@@ -156,29 +228,42 @@ export default function InvestorPage() {
     const amount = inputs.investAmount;
     
     setProcessing(true);
-    addLog(`Preparing to invest ${amount} DREX in FIDC ${fidcId} as ${inputs.isSenior ? 'Senior' : 'Subordinated'} investor...`);
+    addLog(`Preparing to invest ${amount} Stablecoin in FIDC ${fidcId} as ${inputs.isSenior ? 'Senior' : 'Subordinated'} investor...`);
 
     try {
       // Auto-fund wallet for demonstration
-      addLog("Auto-funding wallet with DREX for demonstration...");
-      await fundInvestorWallet(address, (Number(amount) * 1.1).toString());
+      addLog("Auto-funding wallet with Stablecoin for demonstration...");
+      await fundInvestorWallet(address!, (Number(amount) * 1.1).toString(), useDemoAccount);
       addLog("Wallet funded successfully");
+
+      // Verificar se já existem investimentos para o usuário neste FIDC
+      let existingInvestments = [];
+      try {
+        const position = await getInvestorPosition(address, fidcId);
+        existingInvestments = position.investments;
+        addLog(`Found ${existingInvestments.length} existing investments`);
+      } catch (err) {
+        addLog("Could not check existing investments, will continue with new investment");
+      }
 
       // Aprovar o investidor com o tipo correto primeiro (0 = Senior, 1 = Subordinado)
       const investorType = inputs.isSenior ? 0 : 1;
       addLog(`Approving user as ${inputs.isSenior ? 'Senior' : 'Subordinated'} investor...`);
       
-      // Chamar a função approveInvestor do useContractInteraction
-      const approvalResult = await approveInvestor(address, investorType, fidcId);
+      const approvalResult = await approveInvestor(address!, investorType, fidcId, useDemoAccount);
       
       if (approvalResult.success) {
         addLog(`Investor approved as ${inputs.isSenior ? 'Senior' : 'Subordinated'}`);
         
+        // Adicionar pequeno atraso para garantir que a aprovação foi processada
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
         // Agora fazer o investimento
-        const result = await invest(fidcId, amount);
+        addLog(`Initiating investment of ${amount} Stablecoin...`);
+        const result = await invest(fidcId, amount, useDemoAccount);
         
         if (result.success) {
-          addLog(`Investment successful! Invested ${amount} DREX as ${inputs.isSenior ? 'Senior' : 'Subordinated'} investor`);
+          addLog(`Investment successful! Invested ${amount} Stablecoin as ${inputs.isSenior ? 'Senior' : 'Subordinated'} investor`);
           await loadInvestments();
           await checkBalance();
         } else {
@@ -201,14 +286,14 @@ export default function InvestorPage() {
     }
 
     const selectedInvestment = investments.find(
-      inv => inv.investmentId === inputs.investmentId
+      (inv) => inv.investmentId === inputs.investmentId
     );
-    
+
     if (!selectedInvestment) {
       addLog("Selected investment not found");
       return;
     }
-    
+
     setProcessing(true);
     addLog(`Preparing to redeem entire investment ${inputs.investmentId}...`);
 
@@ -216,29 +301,32 @@ export default function InvestorPage() {
       // Calcular o rendimento esperado
       if (fidcDetails) {
         const principal = parseFloat(inputs.redeemAmount);
-        const timeInYears = (Date.now() - selectedInvestment.investmentDate.getTime()) / (365 * 24 * 60 * 60 * 1000);
-        
+        const timeInYears =
+          (Date.now() - selectedInvestment.investmentDate.getTime()) /
+          (365 * 24 * 60 * 60 * 1000);
+
         let annualRate = fidcDetails.annualYield / BPS_DENOMINATOR;
         if (selectedInvestment.isSenior) {
           annualRate += fidcDetails.seniorSpread / BPS_DENOMINATOR;
         }
-        
+
         const grossYield = principal * annualRate * timeInYears;
         const managerFee = grossYield * (fidcDetails.fee / BPS_DENOMINATOR);
         const netYield = grossYield - managerFee;
         const totalExpected = principal + netYield;
-        
+
         addLog(`Expected redemption calculation:`);
-        addLog(`Principal: ${principal.toFixed(2)} DREX`);
+        addLog(`Principal: ${principal.toFixed(2)} Stablecoin`);
         addLog(`Investment time: ${(timeInYears * 365).toFixed(0)} days`);
         addLog(`Annual rate: ${(annualRate * 100).toFixed(2)}%`);
-        addLog(`Gross yield: ${grossYield.toFixed(2)} DREX`);
-        addLog(`Manager fee: ${managerFee.toFixed(2)} DREX`);
-        addLog(`Net yield: ${netYield.toFixed(2)} DREX`);
-        addLog(`Total expected: ${totalExpected.toFixed(2)} DREX`);
+        addLog(`Gross yield: ${grossYield.toFixed(2)} Stablecoin`);
+        addLog(`Manager fee: ${managerFee.toFixed(2)} Stablecoin`);
+        addLog(`Net yield: ${netYield.toFixed(2)} Stablecoin`);
+        addLog(`Total expected: ${totalExpected.toFixed(2)} Stablecoin`);
       }
-      
-      const result = await redeemAll(fidcId, inputs.investmentId);
+
+      // Chamada real ao contrato com ou sem conta de demonstração
+      const result = await redeemAll(fidcId, inputs.investmentId, useDemoAccount);
       
       if (result.success) {
         addLog(`Redemption successful! Redeemed entire investment`);
@@ -248,7 +336,11 @@ export default function InvestorPage() {
         addLog("Redemption failed. See console for details.");
       }
     } catch (error) {
-      addLog(`Error during redemption: ${error instanceof Error ? error.message : String(error)}`);
+      addLog(
+        `Error during redemption: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
     } finally {
       setProcessing(false);
     }
@@ -261,7 +353,9 @@ export default function InvestorPage() {
     }
 
     setProcessing(true);
-    addLog(`Preparing to redeem all investments in FIDC ${fidcId} as manager...`);
+    addLog(
+      `Preparing to redeem all investments in FIDC ${fidcId} as manager...`
+    );
 
     try {
       // Primeiro verificar se o usuário é o gestor
@@ -275,14 +369,14 @@ export default function InvestorPage() {
       // Esta parte dependeria de como você pode obter uma lista de todos os investidores do FIDC
       // Vamos usar um array vazio por enquanto, mas você deve implementar uma lógica para obter os investidores
       const investors: string[] = []; // TODO: Implementar obtenção de investidores
-      
+
       if (investors.length === 0) {
         addLog("No investors found for this FIDC");
         return;
       }
 
       const result = await redeemAllManager(fidcId, investors);
-      
+
       if (result.success) {
         addLog(`Manager redemption successful! Redeemed all investments`);
         await loadInvestments();
@@ -291,7 +385,11 @@ export default function InvestorPage() {
         addLog("Manager redemption failed. See console for details.");
       }
     } catch (error) {
-      addLog(`Error during manager redemption: ${error instanceof Error ? error.message : String(error)}`);
+      addLog(
+        `Error during manager redemption: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
     } finally {
       setProcessing(false);
     }
@@ -329,36 +427,60 @@ export default function InvestorPage() {
 
       <h1 className="text-3xl font-bold mb-6">FIDC Investor Portal</h1>
 
-      <div className="flex justify-end mb-4">
-        <ConnectButton />
+      <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-2 mb-4">
+        <div className="flex items-center">
+          <label className="inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              className="sr-only peer"
+              checked={useDemoAccount}
+              onChange={() => setUseDemoAccount(!useDemoAccount)}
+            />
+            <div className="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+            <span className="ms-3 text-sm font-medium text-gray-900 dark:text-gray-300">
+              Usar conta de demonstração
+            </span>
+          </label>
+          {useDemoAccount && (
+            <span className="ml-2 text-xs text-gray-500">
+              ({DEMO_INVESTOR_ADDRESS.slice(0, 6)}...
+              {DEMO_INVESTOR_ADDRESS.slice(-4)})
+            </span>
+          )}
+        </div>
+
+        {!useDemoAccount && <ConnectButton />}
       </div>
 
-      {!isConnected && (
+      {!isConnected && !useDemoAccount && (
         <div
           className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-6"
           role="alert"
         >
           <p className="font-bold">Wallet not connected</p>
-          <p>Please connect your wallet to interact with this portal</p>
+          <p>
+            Please connect your wallet or use the demo account to interact with
+            this portal
+          </p>
         </div>
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
           <h2 className="text-xl font-semibold mb-4">Make an Investment</h2>
-          
+
           <div className="mb-4">
             <div className="flex justify-between">
-              <span className="text-sm font-medium">Your DREX Balance:</span>
-              <span className="font-bold">{walletBalance} DREX</span>
+              <span className="text-sm font-medium">
+                Your Stablecoin Balance:
+              </span>
+              <span className="font-bold">{walletBalance} Stablecoin</span>
             </div>
           </div>
-          
+
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-1">
-                FIDC ID
-              </label>
+              <label className="block text-sm font-medium mb-1">FIDC ID</label>
               <input
                 type="number"
                 value={fidcId}
@@ -367,20 +489,22 @@ export default function InvestorPage() {
                 min="1"
               />
             </div>
-            
+
             <div>
               <label className="block text-sm font-medium mb-1">
-                Amount to Invest (DREX)
+                Amount to Invest (Stablecoin)
               </label>
               <input
                 type="text"
                 value={inputs.investAmount}
-                onChange={(e) => setInputs({...inputs, investAmount: e.target.value})}
+                onChange={(e) =>
+                  setInputs({ ...inputs, investAmount: e.target.value })
+                }
                 className="w-full p-2 border rounded"
                 placeholder="100"
               />
             </div>
-            
+
             <div>
               <label className="block text-sm font-medium mb-1">
                 Investment Type
@@ -390,7 +514,7 @@ export default function InvestorPage() {
                   <input
                     type="radio"
                     checked={inputs.isSenior}
-                    onChange={() => setInputs({...inputs, isSenior: true})}
+                    onChange={() => setInputs({ ...inputs, isSenior: true })}
                     className="form-radio"
                   />
                   <span className="ml-2">Senior</span>
@@ -399,38 +523,44 @@ export default function InvestorPage() {
                   <input
                     type="radio"
                     checked={!inputs.isSenior}
-                    onChange={() => setInputs({...inputs, isSenior: false})}
+                    onChange={() => setInputs({ ...inputs, isSenior: false })}
                     className="form-radio"
                   />
                   <span className="ml-2">Subordinated</span>
                 </label>
               </div>
             </div>
-            
+
             <button
               onClick={handleInvest}
               disabled={processing || isProcessing || !isConnected}
               className="w-full px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400"
             >
-              {(processing || isProcessing) ? "Processing..." : "Invest Now"}
+              {processing || isProcessing ? "Processing..." : "Invest Now"}
             </button>
           </div>
-          
+
           {fidcDetails && (
             <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-700 rounded">
               <h3 className="font-semibold mb-2">FIDC {fidcId} Details</h3>
               <div className="text-sm space-y-1">
                 <div className="flex justify-between">
                   <span>Status:</span>
-                  <span className="font-medium">{getStatusString(fidcDetails.status)}</span>
+                  <span className="font-medium">
+                    {getStatusString(fidcDetails.status)}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span>Annual Yield:</span>
-                  <span className="font-medium">{fidcDetails.annualYield / 100}%</span>
+                  <span className="font-medium">
+                    {fidcDetails.annualYield / 100}%
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span>Senior Spread:</span>
-                  <span className="font-medium">{fidcDetails.seniorSpread / 100}%</span>
+                  <span className="font-medium">
+                    {fidcDetails.seniorSpread / 100}%
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span>Manager Fee:</span>
@@ -438,7 +568,9 @@ export default function InvestorPage() {
                 </div>
                 <div className="flex justify-between">
                   <span>Total Invested:</span>
-                  <span className="font-medium">{fidcDetails.invested} DREX</span>
+                  <span className="font-medium">
+                    {fidcDetails.invested} Stablecoin
+                  </span>
                 </div>
               </div>
             </div>
@@ -446,7 +578,7 @@ export default function InvestorPage() {
 
           {!fidcDetails && isConnected && (
             <div className="mt-4">
-              <button 
+              <button
                 onClick={() => {
                   addLog("Tentando recarregar dados manualmente...");
                   loadFIDCDetails();
@@ -460,10 +592,10 @@ export default function InvestorPage() {
             </div>
           )}
         </div>
-        
+
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
           <h2 className="text-xl font-semibold mb-4">Redeem Investment</h2>
-          
+
           {investments.length > 0 ? (
             <div className="space-y-4">
               <div>
@@ -472,37 +604,45 @@ export default function InvestorPage() {
                 </label>
                 <select
                   value={inputs.investmentId}
-                  onChange={(e) => setInputs({...inputs, investmentId: Number(e.target.value)})}
+                  onChange={(e) =>
+                    setInputs({
+                      ...inputs,
+                      investmentId: Number(e.target.value),
+                    })
+                  }
                   className="w-full p-2 border rounded"
                 >
-                  {investments.map(inv => (
+                  {investments.map((inv) => (
                     <option key={inv.investmentId} value={inv.investmentId}>
-                      ID: {inv.investmentId} - {inv.amount} DREX ({inv.isSenior ? 'Senior' : 'Subordinated'})
+                      ID: {inv.investmentId} - {inv.amount} Stablecoin (
+                      {inv.isSenior ? "Senior" : "Subordinated"})
                     </option>
                   ))}
                 </select>
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium mb-1">
-                  Amount to Redeem (DREX)
+                  Amount to Redeem (Stablecoin)
                 </label>
                 <input
                   type="text"
                   value={inputs.redeemAmount}
-                  onChange={(e) => setInputs({...inputs, redeemAmount: e.target.value})}
+                  onChange={(e) =>
+                    setInputs({ ...inputs, redeemAmount: e.target.value })
+                  }
                   className="w-full p-2 border rounded"
                 />
               </div>
-              
+
               <button
                 onClick={handleRedeem}
                 disabled={processing || isProcessing || !isConnected}
                 className="w-full px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-400"
               >
-                {(processing || isProcessing) ? "Processing..." : "Redeem Now"}
+                {processing || isProcessing ? "Processing..." : "Redeem Now"}
               </button>
-              
+
               <div className="mt-4">
                 <h3 className="font-medium text-sm mb-2">Your Investments</h3>
                 <div className="max-h-60 overflow-y-auto">
@@ -516,12 +656,19 @@ export default function InvestorPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {investments.map(inv => (
-                        <tr key={inv.investmentId} className="border-b dark:border-gray-700">
+                      {investments.map((inv) => (
+                        <tr
+                          key={inv.investmentId}
+                          className="border-b dark:border-gray-700"
+                        >
                           <td className="py-2 px-3">{inv.investmentId}</td>
-                          <td className="py-2 px-3">{inv.isSenior ? 'Senior' : 'Subordinated'}</td>
-                          <td className="py-2 px-3">{inv.amount} DREX</td>
-                          <td className="py-2 px-3">{inv.investmentDate.toLocaleDateString()}</td>
+                          <td className="py-2 px-3">
+                            {inv.isSenior ? "Senior" : "Subordinated"}
+                          </td>
+                          <td className="py-2 px-3">{inv.amount} Stablecoin</td>
+                          <td className="py-2 px-3">
+                            {inv.investmentDate.toLocaleDateString()}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -539,7 +686,9 @@ export default function InvestorPage() {
       </div>
 
       <div className="mt-8 bg-black rounded-lg shadow p-4 text-green-400 font-mono">
-        <h2 className="text-xl font-semibold mb-2 text-white">Transaction Logs</h2>
+        <h2 className="text-xl font-semibold mb-2 text-white">
+          Transaction Logs
+        </h2>
         <div className="h-64 overflow-y-auto">
           {logs.length === 0 ? (
             <p className="text-gray-500">
@@ -554,27 +703,32 @@ export default function InvestorPage() {
           )}
         </div>
       </div>
-      
+
       <div className="mt-8 bg-white dark:bg-gray-800 rounded-lg shadow p-6">
         <h2 className="text-xl font-semibold mb-4">About FIDC Investments</h2>
-        
+
         <div className="space-y-4">
           <div>
             <h3 className="text-lg font-medium">Investment Types</h3>
             <p className="mt-2">
-              <strong>Senior Investors:</strong> Receive base yield + spread, lower risk
+              <strong>Senior Investors:</strong> Receive base yield + spread,
+              lower risk
             </p>
             <p>
-              <strong>Subordinated Investors:</strong> Receive base yield only, higher risk but potentially higher returns in certain scenarios
+              <strong>Subordinated Investors:</strong> Receive base yield only,
+              higher risk but potentially higher returns in certain scenarios
             </p>
           </div>
-          
+
           <div>
             <h3 className="text-lg font-medium">Yield Calculation</h3>
-            <p className="mb-2">Yield = Principal × Annual Rate × Time (in years)</p>
+            <p className="mb-2">
+              Yield = Principal × Annual Rate × Time (in years)
+            </p>
             <p>
-              The annual rate includes the base yield for all investors, plus the senior spread for senior investors.
-              The manager collects a fee on the yield generated.
+              The annual rate includes the base yield for all investors, plus
+              the senior spread for senior investors. The manager collects a fee
+              on the yield generated.
             </p>
           </div>
         </div>
