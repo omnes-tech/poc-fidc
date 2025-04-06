@@ -30,6 +30,9 @@ export default function InvestorPage() {
     getContracts,
   } = useContractInteraction();
 
+  const [queryAddress, setQueryAddress] = useState<string>("");
+  const [queryFidcId, setQueryFidcId] = useState<number>(1);
+  const [queryResults, setQueryResults] = useState<any>(null);
   const [processing, setProcessing] = useState(false);
   const [fidcId, setFidcId] = useState<number>(1);
   const [logs, setLogs] = useState<string[]>([]);
@@ -50,6 +53,11 @@ export default function InvestorPage() {
     investmentId: 0,
     isSenior: true,
   });
+
+  const [managerRedeemAddresses, setManagerRedeemAddresses] = useState<
+    string[]
+  >([]);
+  const [newRedeemAddress, setNewRedeemAddress] = useState<string>("");
 
   useEffect(() => {
     if (useDemoAccount) {
@@ -103,41 +111,21 @@ export default function InvestorPage() {
         manager: "0x1234...5678",
         validator: "0xabcd...efgh",
         payableAddress: "0x9876...5432",
-        fee: 500, 
+        fee: 500,
         amount: "1000",
         invested: "750",
         valid: true,
-        status: 1, 
+        status: 1,
         annualYield: 1000,
-        gracePeriod: 2592000, 
-        seniorSpread: 300, 
+        gracePeriod: 2592000,
+        seniorSpread: 300,
       });
-      setInvestments([
-        {
-          investmentId: 1,
-          amount: "250",
-          investmentDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // 30 dias atrás
-          yieldStartTime: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
-          isSenior: true
-        },
-        {
-          investmentId: 2,
-          amount: "100",
-          investmentDate: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000), // 15 dias atrás
-          yieldStartTime: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000),
-          isSenior: false
-        }
-      ]);
-      
+
       setWalletBalance("500");
-      
-      setInputs(prev => ({
-        ...prev,
-        investmentId: 1,
-        redeemAmount: "250"
-      }));
-      
       addLog("Conta de demonstração carregada com dados simulados");
+
+      // Carrega os investimentos reais para o endereço de demonstração
+      loadInvestments();
     }
   }, [useDemoAccount]);
 
@@ -149,69 +137,101 @@ export default function InvestorPage() {
   };
 
   const loadFIDCDetails = async () => {
-    if (!isConnected || !address) {
+    if (!isConnected && !useDemoAccount) {
       addLog("Conta não conectada. Não é possível carregar detalhes do FIDC.");
       return;
     }
 
-    if (useDemoAccount) return;
-
     try {
       console.log("Loading FIDC details for ID:", fidcId);
       console.log("Connected with address:", address);
-      
-      const contracts = await getContracts();
+
+      const contracts = await getContracts(useDemoAccount);
       if (!contracts || !contracts.fidcContract) {
         addLog("Erro ao obter contratos. Verifique sua conexão.");
         return;
       }
-      
-      const details = await getFIDCDetails(fidcId);
+
+      const details = await getFIDCDetails(fidcId, useDemoAccount);
       console.log("FIDC details loaded:", details);
       setFidcDetails(details);
       addLog(`FIDC ${fidcId} detalhes carregados com sucesso!`);
     } catch (err) {
       console.error("Error getting FIDC details:", err);
-      addLog(`Falha ao carregar detalhes do FIDC: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  };
-
-  const loadInvestments = async () => {
-    if (!address) return;
-    if (useDemoAccount) return;
-
-    try {
-      const position = await getInvestorPosition(address, fidcId);
-      setInvestments(position.investments);
-
-      if (position.investments.length > 0) {
-        setInputs((prev) => ({
-          ...prev,
-          investmentId: position.investments[0].investmentId,
-          redeemAmount: position.investments[0].amount,
-        }));
-
-        addLog(`Found ${position.investments.length} investments`);
-      } else {
-        addLog("No active investments found");
-      }
-    } catch (err) {
       addLog(
-        `Failed to load investments: ${
+        `Falha ao carregar detalhes do FIDC: ${
           err instanceof Error ? err.message : String(err)
         }`
       );
     }
   };
 
-  const checkBalance = async () => {
+  const loadInvestments = async () => {
     if (!address) return;
-    
-    // Se estiver usando a conta de demonstração, o saldo já é carregado no useEffect
-    if (useDemoAccount) return;
 
     try {
-      const { drexContract } = await getContracts();
+      addLog(`Buscando investimentos para ${address} no FIDC ${fidcId}...`);
+
+      // Usa getInvestorPosition tanto para demo quanto para wallet real
+      const position = await getInvestorPosition(
+        address,
+        fidcId,
+        useDemoAccount
+      );
+      console.log("Posição do investidor:", position);
+
+      if (!position || !position.investments) {
+        addLog("Não foi possível obter informações de investimentos");
+        setInvestments([]); // Limpa os investimentos quando não encontra nada
+        return;
+      }
+
+      setInvestments(position.investments);
+      addLog(`Encontrados ${position.investments.length} investimentos`);
+
+      if (position.investments.length > 0) {
+        addLog("Detalhes dos investimentos:");
+        position.investments.forEach((inv) => {
+          const dateStr = inv.investmentDate.toLocaleDateString();
+          const typeStr = inv.isSenior ? "Senior" : "Subordinado";
+          addLog(
+            `- ID ${inv.investmentId}: ${inv.amount} Stablecoin (${typeStr}) - ${dateStr}`
+          );
+        });
+
+        setInputs((prev) => ({
+          ...prev,
+          investmentId: position.investments[0].investmentId,
+          redeemAmount: position.investments[0].amount,
+        }));
+      } else {
+        addLog("Nenhum investimento ativo encontrado");
+        setInputs((prev) => ({
+          ...prev,
+          investmentId: 0,
+          redeemAmount: "0",
+        }));
+      }
+    } catch (err) {
+      console.error("Erro ao carregar investimentos:", err);
+      addLog(
+        `Falha ao carregar investimentos: ${
+          err instanceof Error ? err.message : String(err)
+        }`
+      );
+      setInvestments([]); // Limpa os investimentos em caso de erro
+      setInputs((prev) => ({
+        ...prev,
+        investmentId: 0,
+        redeemAmount: "0",
+      }));
+    }
+  };
+
+  const checkBalance = async () => {
+    if (!address) return;
+    try {
+      const { drexContract } = await getContracts(useDemoAccount);
       const balance = await drexContract.balanceOf(address);
       setWalletBalance(ethers.formatEther(balance));
     } catch (err) {
@@ -224,46 +244,61 @@ export default function InvestorPage() {
       addLog("Please connect your wallet first");
       return;
     }
-
     const amount = inputs.investAmount;
-    
     setProcessing(true);
-    addLog(`Preparing to invest ${amount} Stablecoin in FIDC ${fidcId} as ${inputs.isSenior ? 'Senior' : 'Subordinated'} investor...`);
+    addLog(
+      `Preparing to invest ${amount} Stablecoin in FIDC ${fidcId} as ${
+        inputs.isSenior ? "Senior" : "Subordinated"
+      } investor...`
+    );
 
     try {
-      // Auto-fund wallet for demonstration
       addLog("Auto-funding wallet with Stablecoin for demonstration...");
-      await fundInvestorWallet(address!, (Number(amount) * 1.1).toString(), useDemoAccount);
+      await fundInvestorWallet(
+        address!,
+        (Number(amount) * 1.1).toString(),
+        useDemoAccount
+      );
       addLog("Wallet funded successfully");
 
-      // Verificar se já existem investimentos para o usuário neste FIDC
       let existingInvestments = [];
       try {
-        const position = await getInvestorPosition(address, fidcId);
+        const position = await getInvestorPosition(
+          address,
+          fidcId,
+          useDemoAccount
+        );
         existingInvestments = position.investments;
         addLog(`Found ${existingInvestments.length} existing investments`);
       } catch (err) {
-        addLog("Could not check existing investments, will continue with new investment");
+        addLog(
+          "Could not check existing investments, will continue with new investment"
+        );
       }
-
-      // Aprovar o investidor com o tipo correto primeiro (0 = Senior, 1 = Subordinado)
       const investorType = inputs.isSenior ? 0 : 1;
-      addLog(`Approving user as ${inputs.isSenior ? 'Senior' : 'Subordinated'} investor...`);
-      
-      const approvalResult = await approveInvestor(address!, investorType, fidcId, useDemoAccount);
-      
+      addLog(
+        `Approving user as ${
+          inputs.isSenior ? "Senior" : "Subordinated"
+        } investor...`
+      );
+      const approvalResult = await approveInvestor(
+        address!,
+        investorType,
+        fidcId,
+        useDemoAccount
+      );
       if (approvalResult.success) {
-        addLog(`Investor approved as ${inputs.isSenior ? 'Senior' : 'Subordinated'}`);
-        
-        // Adicionar pequeno atraso para garantir que a aprovação foi processada
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        
-        // Agora fazer o investimento
+        addLog(
+          `Investor approved as ${inputs.isSenior ? "Senior" : "Subordinated"}`
+        );
         addLog(`Initiating investment of ${amount} Stablecoin...`);
         const result = await invest(fidcId, amount, useDemoAccount);
-        
         if (result.success) {
-          addLog(`Investment successful! Invested ${amount} Stablecoin as ${inputs.isSenior ? 'Senior' : 'Subordinated'} investor`);
+          addLog(
+            `Investment successful! Invested ${amount} Stablecoin as ${
+              inputs.isSenior ? "Senior" : "Subordinated"
+            } investor`
+          );
           await loadInvestments();
           await checkBalance();
         } else {
@@ -273,71 +308,8 @@ export default function InvestorPage() {
         addLog("Failed to approve investor type. See console for details.");
       }
     } catch (error) {
-      addLog(`Error during investment: ${error instanceof Error ? error.message : String(error)}`);
-    } finally {
-      setProcessing(false);
-    }
-  };
-
-  const handleRedeem = async () => {
-    if (!isConnected || investments.length === 0) {
-      addLog("Please connect your wallet and make an investment first");
-      return;
-    }
-
-    const selectedInvestment = investments.find(
-      (inv) => inv.investmentId === inputs.investmentId
-    );
-
-    if (!selectedInvestment) {
-      addLog("Selected investment not found");
-      return;
-    }
-
-    setProcessing(true);
-    addLog(`Preparing to redeem entire investment ${inputs.investmentId}...`);
-
-    try {
-      // Calcular o rendimento esperado
-      if (fidcDetails) {
-        const principal = parseFloat(inputs.redeemAmount);
-        const timeInYears =
-          (Date.now() - selectedInvestment.investmentDate.getTime()) /
-          (365 * 24 * 60 * 60 * 1000);
-
-        let annualRate = fidcDetails.annualYield / BPS_DENOMINATOR;
-        if (selectedInvestment.isSenior) {
-          annualRate += fidcDetails.seniorSpread / BPS_DENOMINATOR;
-        }
-
-        const grossYield = principal * annualRate * timeInYears;
-        const managerFee = grossYield * (fidcDetails.fee / BPS_DENOMINATOR);
-        const netYield = grossYield - managerFee;
-        const totalExpected = principal + netYield;
-
-        addLog(`Expected redemption calculation:`);
-        addLog(`Principal: ${principal.toFixed(2)} Stablecoin`);
-        addLog(`Investment time: ${(timeInYears * 365).toFixed(0)} days`);
-        addLog(`Annual rate: ${(annualRate * 100).toFixed(2)}%`);
-        addLog(`Gross yield: ${grossYield.toFixed(2)} Stablecoin`);
-        addLog(`Manager fee: ${managerFee.toFixed(2)} Stablecoin`);
-        addLog(`Net yield: ${netYield.toFixed(2)} Stablecoin`);
-        addLog(`Total expected: ${totalExpected.toFixed(2)} Stablecoin`);
-      }
-
-      // Chamada real ao contrato com ou sem conta de demonstração
-      const result = await redeemAll(fidcId, inputs.investmentId, useDemoAccount);
-      
-      if (result.success) {
-        addLog(`Redemption successful! Redeemed entire investment`);
-        await loadInvestments();
-        await checkBalance();
-      } else {
-        addLog("Redemption failed. See console for details.");
-      }
-    } catch (error) {
       addLog(
-        `Error during redemption: ${
+        `Error during investment: ${
           error instanceof Error ? error.message : String(error)
         }`
       );
@@ -347,46 +319,53 @@ export default function InvestorPage() {
   };
 
   const handleManagerRedeemAll = async () => {
-    if (!isConnected) {
+    if (!isConnected && !useDemoAccount) {
       addLog("Please connect your wallet first");
+      return;
+    }
+
+    if (managerRedeemAddresses.length === 0) {
+      addLog("Por favor adicione pelo menos um endereço para resgate");
       return;
     }
 
     setProcessing(true);
     addLog(
-      `Preparing to redeem all investments in FIDC ${fidcId} as manager...`
+      `Preparando para resgatar investimentos para ${managerRedeemAddresses.length} endereços no FIDC ${fidcId}...`
     );
 
     try {
-      // Primeiro verificar se o usuário é o gestor
-      const details = await getFIDCDetails(fidcId);
-      if (details.manager.toLowerCase() !== address?.toLowerCase()) {
-        addLog("You are not the manager of this FIDC");
-        return;
+      // Verifica se é o manager usando a conta de demonstração ou a carteira conectada
+      const details = await getFIDCDetails(fidcId, useDemoAccount);
+      const currentAddress = useDemoAccount ? DEMO_INVESTOR_ADDRESS : address;
+
+      if (details.manager.toLowerCase() !== currentAddress?.toLowerCase()) {
+        // Simplificando: apenas retorna a mensagem apropriada baseada no modo
+        const message = useDemoAccount
+          ? "Conta de demonstração não é o manager deste FIDC"
+          : "Você não é o manager deste FIDC";
+        throw new Error(message);
       }
 
-      // Obter todos os investidores
-      // Esta parte dependeria de como você pode obter uma lista de todos os investidores do FIDC
-      // Vamos usar um array vazio por enquanto, mas você deve implementar uma lógica para obter os investidores
-      const investors: string[] = []; // TODO: Implementar obtenção de investidores
-
-      if (investors.length === 0) {
-        addLog("No investors found for this FIDC");
-        return;
-      }
-
-      const result = await redeemAllManager(fidcId, investors);
+      addLog(
+        `Executando resgate para ${managerRedeemAddresses.length} investidores...`
+      );
+      const result = await redeemAllManager(
+        fidcId,
+        managerRedeemAddresses,
+        useDemoAccount
+      );
 
       if (result.success) {
-        addLog(`Manager redemption successful! Redeemed all investments`);
-        await loadInvestments();
-        await checkBalance();
+        addLog(`Resgate manager concluído com sucesso!`);
+        setManagerRedeemAddresses([]); // Limpa a lista após sucesso
       } else {
-        addLog("Manager redemption failed. See console for details.");
+        addLog("Falha no resgate manager. Veja o console para detalhes.");
       }
     } catch (error) {
+      console.error("Error in manager redemption:", error);
       addLog(
-        `Error during manager redemption: ${
+        `Erro durante o resgate manager: ${
           error instanceof Error ? error.message : String(error)
         }`
       );
@@ -398,6 +377,56 @@ export default function InvestorPage() {
   const getStatusString = (statusCode: number): string => {
     const statuses = ["PENDING", "ACTIVE", "STOPPED", "LIQUIDATED"];
     return statuses[statusCode] || "UNKNOWN";
+  };
+
+  const handleQueryInvestorPosition = async () => {
+    if (!queryAddress || !ethers.isAddress(queryAddress)) {
+      addLog("Por favor insira um endereço válido para consulta");
+      return;
+    }
+
+    setProcessing(true);
+    addLog(
+      `Consultando posições do investidor ${queryAddress} no FIDC ${queryFidcId}...`
+    );
+
+    try {
+      const position = await getInvestorPosition(
+        queryAddress,
+        queryFidcId,
+        useDemoAccount
+      );
+
+      if (
+        !position ||
+        !position.investments ||
+        position.investments.length === 0
+      ) {
+        addLog(
+          `Nenhum investimento encontrado para ${queryAddress} no FIDC ${queryFidcId}`
+        );
+        setQueryResults(null);
+      } else {
+        setQueryResults(position);
+        addLog(`Encontrados ${position.investments.length} investimentos`);
+
+        position.investments.forEach((inv) => {
+          const dateStr = inv.investmentDate.toLocaleDateString();
+          const typeStr = inv.isSenior ? "Senior" : "Subordinado";
+          addLog(
+            `- ID ${inv.investmentId}: ${inv.amount} Stablecoin (${typeStr}) - ${dateStr}`
+          );
+        });
+      }
+    } catch (err) {
+      console.error("Erro ao consultar posição do investidor:", err);
+      addLog(
+        `Falha na consulta: ${err instanceof Error ? err.message : String(err)}`
+      );
+      setQueryResults(null);
+    } finally {
+      setProcessing(false);
+    }
   };
 
   return (
@@ -594,7 +623,30 @@ export default function InvestorPage() {
         </div>
 
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-          <h2 className="text-xl font-semibold mb-4">Redeem Investment</h2>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-semibold">Redeem Investment</h2>
+            <div className="flex space-x-2">
+              <input
+                type="number"
+                value={fidcId}
+                onChange={(e) => setFidcId(Number(e.target.value))}
+                className="w-20 p-1 text-xs border rounded"
+                min="1"
+                placeholder="FIDC ID"
+              />
+              <button
+                onClick={async () => {
+                  addLog(
+                    `Forçando recarga de investimentos do FIDC ${fidcId}...`
+                  );
+                  await loadInvestments();
+                }}
+                className="px-3 py-1 text-xs bg-blue-500 text-white rounded"
+              >
+                Recarregar
+              </button>
+            </div>
+          </div>
 
           {investments.length > 0 ? (
             <div className="space-y-4">
@@ -621,58 +673,199 @@ export default function InvestorPage() {
                 </select>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  Amount to Redeem (Stablecoin)
-                </label>
-                <input
-                  type="text"
-                  value={inputs.redeemAmount}
-                  onChange={(e) =>
-                    setInputs({ ...inputs, redeemAmount: e.target.value })
-                  }
-                  className="w-full p-2 border rounded"
-                />
-              </div>
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={async () => {
+                    if (!isConnected || !address) {
+                      addLog("Por favor conecte sua carteira primeiro");
+                      return;
+                    }
 
-              <button
-                onClick={handleRedeem}
-                disabled={processing || isProcessing || !isConnected}
-                className="w-full px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-400"
-              >
-                {processing || isProcessing ? "Processing..." : "Redeem Now"}
-              </button>
+                    if (investments.length === 0) {
+                      addLog("Nenhum investimento encontrado para resgate");
+                      return;
+                    }
 
-              <div className="mt-4">
-                <h3 className="font-medium text-sm mb-2">Your Investments</h3>
-                <div className="max-h-60 overflow-y-auto">
-                  <table className="min-w-full text-sm">
-                    <thead>
-                      <tr className="bg-gray-100 dark:bg-gray-700">
-                        <th className="py-2 px-3 text-left">ID</th>
-                        <th className="py-2 px-3 text-left">Type</th>
-                        <th className="py-2 px-3 text-left">Amount</th>
-                        <th className="py-2 px-3 text-left">Date</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {investments.map((inv) => (
-                        <tr
-                          key={inv.investmentId}
-                          className="border-b dark:border-gray-700"
-                        >
-                          <td className="py-2 px-3">{inv.investmentId}</td>
-                          <td className="py-2 px-3">
-                            {inv.isSenior ? "Senior" : "Subordinated"}
-                          </td>
-                          <td className="py-2 px-3">{inv.amount} Stablecoin</td>
-                          <td className="py-2 px-3">
-                            {inv.investmentDate.toLocaleDateString()}
-                          </td>
+                    const selectedInvestment = investments.find(
+                      (inv) => inv.investmentId === inputs.investmentId
+                    );
+
+                    if (!selectedInvestment) {
+                      addLog(
+                        `Investimento ID ${inputs.investmentId} não encontrado`
+                      );
+                      return;
+                    }
+
+                    setProcessing(true);
+                    addLog(
+                      `Resgatando todo o investimento ${inputs.investmentId}...`
+                    );
+
+                    try {
+                      const result = await redeemAll(
+                        fidcId,
+                        inputs.investmentId,
+                        useDemoAccount
+                      );
+
+                      if (result.success) {
+                        addLog(`Resgate total concluído com sucesso!`);
+                        await loadInvestments();
+                        await checkBalance();
+                      } else {
+                        addLog(
+                          "Falha no resgate total. Veja o console para detalhes."
+                        );
+                      }
+                    } catch (error) {
+                      addLog(
+                        `Erro durante o resgate total: ${
+                          error instanceof Error ? error.message : String(error)
+                        }`
+                      );
+                    } finally {
+                      setProcessing(false);
+                    }
+                  }}
+                  disabled={processing || isProcessing || !isConnected}
+                  className="w-full px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:bg-gray-400"
+                >
+                  {processing || isProcessing ? "Processing..." : "Redeem All"}
+                </button>
+
+                <div className="space-y-4">
+                  <div className="border-t pt-4 mt-4">
+                    <h3 className="font-medium text-sm mb-2">
+                      Manager Redeem Multiple Addresses
+                    </h3>
+                    <div className="flex gap-2 mb-2">
+                      <input
+                        type="text"
+                        value={newRedeemAddress}
+                        onChange={(e) => setNewRedeemAddress(e.target.value)}
+                        placeholder="Endereço do investidor"
+                        className="flex-1 p-2 text-xs border rounded"
+                      />
+                      <button
+                        onClick={() => {
+                          if (
+                            !newRedeemAddress ||
+                            !ethers.isAddress(newRedeemAddress)
+                          ) {
+                            addLog("Por favor insira um endereço válido");
+                            return;
+                          }
+                          if (
+                            managerRedeemAddresses.includes(newRedeemAddress)
+                          ) {
+                            addLog("Este endereço já foi adicionado");
+                            return;
+                          }
+                          setManagerRedeemAddresses([
+                            ...managerRedeemAddresses,
+                            newRedeemAddress,
+                          ]);
+                          setNewRedeemAddress("");
+                          addLog(
+                            `Endereço ${newRedeemAddress} adicionado à lista de resgate`
+                          );
+                        }}
+                        className="px-3 py-1 text-xs bg-green-500 text-white rounded"
+                      >
+                        Adicionar
+                      </button>
+                    </div>
+
+                    {managerRedeemAddresses.length > 0 && (
+                      <div className="mb-2 max-h-32 overflow-y-auto">
+                        <table className="min-w-full text-xs">
+                          <thead>
+                            <tr className="bg-gray-100">
+                              <th className="py-1 px-2 text-left">Endereço</th>
+                              <th className="py-1 px-2 text-right">Ação</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {managerRedeemAddresses.map((addr, index) => (
+                              <tr key={addr} className="border-b">
+                                <td className="py-1 px-2">
+                                  {addr.slice(0, 6)}...{addr.slice(-4)}
+                                </td>
+                                <td className="py-1 px-2 text-right">
+                                  <button
+                                    onClick={() => {
+                                      setManagerRedeemAddresses(
+                                        managerRedeemAddresses.filter(
+                                          (a) => a !== addr
+                                        )
+                                      );
+                                      addLog(
+                                        `Endereço ${addr} removido da lista de resgate`
+                                      );
+                                    }}
+                                    className="px-2 py-0.5 text-xs bg-red-500 text-white rounded"
+                                  >
+                                    Remover
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+
+                    <button
+                      onClick={handleManagerRedeemAll}
+                      disabled={
+                        processing ||
+                        isProcessing ||
+                        !isConnected ||
+                        managerRedeemAddresses.length === 0
+                      }
+                      className="w-full px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:bg-gray-400"
+                    >
+                      {processing || isProcessing
+                        ? "Processing..."
+                        : `Redeem All Manager (${managerRedeemAddresses.length} endereços)`}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <h3 className="font-medium text-sm mb-2">Your Investments</h3>
+                  <div className="max-h-60 overflow-y-auto">
+                    <table className="min-w-full text-sm">
+                      <thead>
+                        <tr className="bg-gray-100 dark:bg-gray-700">
+                          <th className="py-2 px-3 text-left">ID</th>
+                          <th className="py-2 px-3 text-left">Type</th>
+                          <th className="py-2 px-3 text-left">Amount</th>
+                          <th className="py-2 px-3 text-left">Date</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {investments.map((inv) => (
+                          <tr
+                            key={inv.investmentId}
+                            className="border-b dark:border-gray-700"
+                          >
+                            <td className="py-2 px-3">{inv.investmentId}</td>
+                            <td className="py-2 px-3">
+                              {inv.isSenior ? "Senior" : "Subordinated"}
+                            </td>
+                            <td className="py-2 px-3">
+                              {inv.amount} Stablecoin
+                            </td>
+                            <td className="py-2 px-3">
+                              {inv.investmentDate.toLocaleDateString()}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             </div>
@@ -681,6 +874,141 @@ export default function InvestorPage() {
               <p>No active investments found.</p>
               <p className="mt-2">Make an investment first.</p>
             </div>
+          )}
+        </div>
+      </div>
+
+      {/* Nova seção independente para Redeem All Manager */}
+      <div className="mt-6 bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <h2 className="text-xl font-semibold mb-4">
+          Manager Redeem Multiple Addresses
+        </h2>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">FIDC ID</label>
+            <input
+              type="number"
+              value={fidcId}
+              onChange={(e) => setFidcId(Number(e.target.value))}
+              className="w-full p-2 border rounded"
+              min="1"
+              placeholder="FIDC ID"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">
+              Add Investor Address
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newRedeemAddress}
+                onChange={(e) => setNewRedeemAddress(e.target.value)}
+                placeholder="Endereço do investidor"
+                className="flex-1 p-2 border rounded"
+              />
+              <button
+                onClick={() => {
+                  if (
+                    !newRedeemAddress ||
+                    !ethers.isAddress(newRedeemAddress)
+                  ) {
+                    addLog("Por favor insira um endereço válido");
+                    return;
+                  }
+                  if (managerRedeemAddresses.includes(newRedeemAddress)) {
+                    addLog("Este endereço já foi adicionado");
+                    return;
+                  }
+                  setManagerRedeemAddresses([
+                    ...managerRedeemAddresses,
+                    newRedeemAddress,
+                  ]);
+                  setNewRedeemAddress("");
+                  addLog(
+                    `Endereço ${newRedeemAddress} adicionado à lista de resgate`
+                  );
+                }}
+                className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
+              >
+                Adicionar
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {managerRedeemAddresses.length > 0 && (
+          <div className="mb-4">
+            <h3 className="text-sm font-medium mb-2">Addresses to Redeem</h3>
+            <div className="max-h-48 overflow-y-auto border rounded">
+              <table className="min-w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="py-2 px-4 text-left text-xs font-medium text-gray-500">
+                      Endereço
+                    </th>
+                    <th className="py-2 px-4 text-right text-xs font-medium text-gray-500">
+                      Ação
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {managerRedeemAddresses.map((addr) => (
+                    <tr key={addr} className="hover:bg-gray-50">
+                      <td className="py-2 px-4 text-sm">
+                        {addr.slice(0, 6)}...{addr.slice(-4)}
+                      </td>
+                      <td className="py-2 px-4 text-right">
+                        <button
+                          onClick={() => {
+                            setManagerRedeemAddresses(
+                              managerRedeemAddresses.filter((a) => a !== addr)
+                            );
+                            addLog(
+                              `Endereço ${addr} removido da lista de resgate`
+                            );
+                          }}
+                          className="px-3 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600"
+                        >
+                          Remover
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        <div className="flex items-center gap-4">
+          <button
+            onClick={handleManagerRedeemAll}
+            disabled={
+              processing ||
+              isProcessing ||
+              !isConnected ||
+              managerRedeemAddresses.length === 0
+            }
+            className="flex-1 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:bg-gray-400"
+          >
+            {processing || isProcessing
+              ? "Processing..."
+              : `Redeem All Manager (${managerRedeemAddresses.length} endereços)`}
+          </button>
+
+          {managerRedeemAddresses.length > 0 && (
+            <button
+              onClick={() => {
+                setManagerRedeemAddresses([]);
+                addLog("Lista de endereços para resgate limpa");
+              }}
+              className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
+            >
+              Limpar Lista
+            </button>
           )}
         </div>
       </div>
@@ -732,6 +1060,195 @@ export default function InvestorPage() {
             </p>
           </div>
         </div>
+      </div>
+
+      <button
+        onClick={loadInvestments}
+        className="mt-2 px-3 py-1 text-xs bg-blue-500 text-white rounded"
+      >
+        Recarregar investimentos
+      </button>
+
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
+        <h2 className="text-xl font-semibold mb-4">
+          Consultar Posições de Investidor
+        </h2>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">
+              Endereço do Investidor
+            </label>
+            <input
+              type="text"
+              value={queryAddress}
+              onChange={(e) => setQueryAddress(e.target.value)}
+              className="w-full p-2 border rounded"
+              placeholder="0x..."
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">FIDC ID</label>
+            <input
+              type="number"
+              value={queryFidcId}
+              onChange={(e) => setQueryFidcId(Number(e.target.value))}
+              className="w-full p-2 border rounded"
+              min="1"
+            />
+          </div>
+        </div>
+
+        <button
+          onClick={handleQueryInvestorPosition}
+          disabled={processing || isProcessing}
+          className="w-full mt-4 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-400"
+        >
+          {processing || isProcessing ? "Consultando..." : "Consultar Posições"}
+        </button>
+
+        {queryResults && (
+          <div className="mt-4 border-t pt-4">
+            <h3 className="font-medium mb-2">Resultados da Consulta</h3>
+            <div className="text-sm mb-2">
+              <div className="flex justify-between">
+                <span>Endereço:</span>
+                <span className="font-medium">
+                  {queryAddress.slice(0, 6)}...{queryAddress.slice(-4)}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span>FIDC ID:</span>
+                <span className="font-medium">{queryResults.fidcId}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Total Investido:</span>
+                <span className="font-medium">
+                  {queryResults.totalAmount} Stablecoin
+                </span>
+              </div>
+            </div>
+
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="bg-gray-100 dark:bg-gray-700">
+                  <th className="py-2 px-3 text-left">ID</th>
+                  <th className="py-2 px-3 text-left">Tipo</th>
+                  <th className="py-2 px-3 text-left">Valor</th>
+                  <th className="py-2 px-3 text-left">Data</th>
+                  <th className="py-2 px-3 text-center">Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {queryResults.investments.map((inv) => (
+                  <tr
+                    key={inv.investmentId}
+                    className="border-b dark:border-gray-700"
+                  >
+                    <td className="py-2 px-3">{inv.investmentId}</td>
+                    <td className="py-2 px-3">
+                      {inv.isSenior ? "Senior" : "Subordinado"}
+                    </td>
+                    <td className="py-2 px-3">{inv.amount} Stablecoin</td>
+                    <td className="py-2 px-3">
+                      {inv.investmentDate.toLocaleDateString()}
+                    </td>
+                    <td className="py-2 px-3 text-center">
+                      <button
+                        onClick={async () => {
+                          if (!isConnected) {
+                            addLog(
+                              "Por favor conecte sua carteira para resgatar"
+                            );
+                            return;
+                          }
+
+                          // Verificar se é sua carteira ou você é o gestor
+                          const selfAddress =
+                            address?.toLowerCase() ===
+                            queryAddress.toLowerCase();
+                          let isManager = false;
+
+                          try {
+                            const details = await getFIDCDetails(queryFidcId);
+                            isManager =
+                              details.manager.toLowerCase() ===
+                              address?.toLowerCase();
+                          } catch (err) {
+                            console.error(
+                              "Erro ao verificar se é gestor:",
+                              err
+                            );
+                          }
+
+                          if (!selfAddress && !isManager) {
+                            addLog(
+                              "Você só pode resgatar seus próprios investimentos ou como gestor"
+                            );
+                            return;
+                          }
+
+                          setProcessing(true);
+                          addLog(
+                            `Preparando para resgatar o investimento ${inv.investmentId} do FIDC ${queryFidcId}...`
+                          );
+
+                          try {
+                            // Se for o próprio endereço, usa redeemAll, se for gestor, usa redeemAllManager
+                            let result;
+                            if (selfAddress) {
+                              result = await redeemAll(
+                                queryFidcId,
+                                inv.investmentId,
+                                useDemoAccount
+                              );
+                              addLog(`Resgatando como investidor direto...`);
+                            } else if (isManager) {
+                              result = await redeemAllManager(
+                                queryFidcId,
+                                [queryAddress],
+                                useDemoAccount
+                              );
+                              addLog(`Resgatando como gestor...`);
+                            }
+
+                            if (result?.success) {
+                              addLog(
+                                `Resgate do investimento ${inv.investmentId} concluído com sucesso!`
+                              );
+                              await handleQueryInvestorPosition(); // Atualiza a consulta
+                              await loadInvestments(); // Atualiza os investimentos do usuário atual
+                              await checkBalance();
+                            } else {
+                              addLog(
+                                "Falha no resgate. Veja o console para detalhes."
+                              );
+                            }
+                          } catch (error) {
+                            addLog(
+                              `Erro durante o resgate: ${
+                                error instanceof Error
+                                  ? error.message
+                                  : String(error)
+                              }`
+                            );
+                          } finally {
+                            setProcessing(false);
+                          }
+                        }}
+                        disabled={processing || isProcessing}
+                        className="px-2 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600 disabled:bg-gray-400"
+                      >
+                        Resgatar
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

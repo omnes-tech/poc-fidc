@@ -17,12 +17,14 @@ export default function FIDCDemoPage() {
     approveEmissionValidator,
     approveEmissionPayable,
     approveInvestor,
+    approveManager,
+    approvedValidator, 
+    approvePayable,    
     invest,
     redeem,
     getFIDCDetails,
     getInvestorPosition,
     stopFIDC,
-    initiateLiquidation,
     fundInvestorWallet,
     getContracts,
   } = useContractInteraction();
@@ -39,14 +41,15 @@ export default function FIDCDemoPage() {
   const [mintAmount, setMintAmount] = useState<string>("1000");
 
   const [formData, setFormData] = useState({
-    annualYield: 2000,
+    annualYield: 18000,
     seniorSpread: 500,
     fee: 100,
-    gracePeriod: 1 * 24 * 60 * 60,
-    collateralAmount: 1000,
-    seniorInvestAmount: 600,
-    subInvestAmount: 400,
+    gracePeriod: 86400,
+    collateralAmount: 100000,
+    seniorInvestAmount: 10000,
+    subInvestAmount: 6000,
     simulatedDays: 180,
+    managerAddress: "",
     validatorAddress: "",
     payableAddress: "",
     seniorInvestorAddress: "",
@@ -69,6 +72,7 @@ export default function FIDCDemoPage() {
     if (address) {
       setFormData((prev) => ({
         ...prev,
+        managerAddress: address,
         validatorAddress: address,
         payableAddress: address,
         seniorInvestorAddress: address,
@@ -211,24 +215,64 @@ export default function FIDCDemoPage() {
         addLog("Configuring roles for the FIDC...");
 
         try {
-          addLog(
-            "Roles will be configured in the next step during FIDC initialization"
-          );
-          addLog(`Manager: ${address}`);
+          // Obter o endereço da demo wallet
+          const { signer: demoSigner } = await getContracts(true);
+          const demoWalletAddress = demoSigner.address;
+          
+          // Verificar se o endereço do manager que estamos aprovando é a demo wallet
+          const isManagerDemoWallet = formData.managerAddress.toLowerCase() === demoWalletAddress.toLowerCase();
+      
+          // SEMPRE aprovar o manager usando a demo wallet
+          addLog(`Approving manager role: ${formData.managerAddress} using demo wallet`);
+          const managerResult = await approveManager(formData.managerAddress, true); // Forçar uso da demo wallet
+      
+          if (managerResult.success) {
+              addLog("Manager role approved successfully using demo wallet");
+              
+              // Se o endereço do manager aprovado for a demo wallet, usar a demo wallet para as próximas aprovações
+              addLog(`Approving validator role: ${formData.validatorAddress}`);
+              const validatorResult = await approvedValidator(
+                  formData.validatorAddress,
+                  isManagerDemoWallet // Usar demo wallet apenas se o endereço do manager for a demo wallet
+              );
+              
+              if (validatorResult.success) {
+                  addLog(`Validator approved successfully ${isManagerDemoWallet ? 'using demo wallet' : 'using connected wallet'}`);
+                  
+                  // Aprovar payable usando a mesma lógica
+                  addLog(`Approving payable role: ${formData.payableAddress}`);
+                  const payableResult = await approvePayable(
+                      formData.payableAddress,
+                      isManagerDemoWallet // Usar demo wallet apenas se o endereço do manager for a demo wallet
+                  );
+                  
+                  if (payableResult.success) {
+                      addLog(`Payable approved successfully ${isManagerDemoWallet ? 'using demo wallet' : 'using connected wallet'}`);
+                  } else {
+                      addLog("Failed to approve payable role");
+                      return;
+                  }
+              } else {
+                  addLog("Failed to approve validator role");
+                  return;
+              }
+          } else {
+              addLog("Failed to approve manager role. Check console for details.");
+              return;
+          }
+      
+          addLog("All roles configured successfully");
+          addLog(`Manager: ${formData.managerAddress}`);
           addLog(`Validator: ${formData.validatorAddress}`);
           addLog(`Payable: ${formData.payableAddress}`);
-
+      
           updateStablecoinBalances();
           setCurrentStep(1);
-        } catch (error) {
-          addLog(
-            `Error configuring roles: ${
-              error instanceof Error ? error.message : String(error)
-            }`
-          );
-        } finally {
+      } catch (error) {
+          addLog(`Error configuring roles: ${error instanceof Error ? error.message : String(error)}`);
+      } finally {
           setProcessing(false);
-        }
+      }
       },
     },
     {
@@ -255,39 +299,47 @@ export default function FIDCDemoPage() {
         addLog("Initializing FIDC...");
 
         try {
+          // Obter o endereço da demo wallet
+          const { signer: demoSigner } = await getContracts(true);
+          const demoWalletAddress = demoSigner.address;
+          
+          // Verificar se o endereço do manager é a demo wallet
+          const isManagerDemoWallet = formData.managerAddress.toLowerCase() === demoWalletAddress.toLowerCase();
+      
+          // Decidir qual carteira usar para inicializar o FIDC
+          const useDemoForInit = isManagerDemoWallet; // Usar demo wallet apenas se o manager for a demo wallet
+          
+          addLog(`Initializing FIDC ${useDemoForInit ? 'using demo wallet' : 'using connected wallet'}...`);
           addLog(`Setting up FIDC with annual yield: ${
-            formData.annualYield / 100
+              formData.annualYield / 100
           }%, 
                   senior spread: ${formData.seniorSpread / 100}%, 
                   fee: ${formData.fee / 100}%, 
                   grace period: ${formData.gracePeriod / (24 * 60 * 60)} days`);
-
+      
           const result = await initializeFIDC(
-            address!,
-            formData.validatorAddress,
-            formData.payableAddress,
-            formData.fee,
-            formData.annualYield,
-            formData.gracePeriod,
-            formData.seniorSpread
+              formData.managerAddress,
+              formData.validatorAddress,
+              formData.payableAddress,
+              formData.fee,
+              formData.annualYield,
+              formData.gracePeriod,
+              formData.seniorSpread,
+              useDemoForInit // Passar o parâmetro useDemoWallet
           );
-
+      
           if (result.success && result.fidcId) {
-            setFidcId(result.fidcId);
-            addLog(`FIDC initialized with ID: ${result.fidcId}`);
-            setCurrentStep(2);
+              setFidcId(result.fidcId);
+              addLog(`FIDC initialized with ID: ${result.fidcId} ${useDemoForInit ? 'using demo wallet' : 'using connected wallet'}`);
+              setCurrentStep(2);
           } else {
-            addLog("Failed to initialize FIDC. Check console for details.");
+              addLog("Failed to initialize FIDC. Check console for details.");
           }
-        } catch (error) {
-          addLog(
-            `Error initializing FIDC: ${
-              error instanceof Error ? error.message : String(error)
-            }`
-          );
-        } finally {
+      } catch (error) {
+          addLog(`Error initializing FIDC: ${error instanceof Error ? error.message : String(error)}`);
+      } finally {
           setProcessing(false);
-        }
+      }
       },
     },
     {
@@ -313,8 +365,8 @@ export default function FIDCDemoPage() {
 
         try {
           addLog(`Validator approving FIDC ID: ${fidcId}`);
-          addLog(`Schedule amount: ${formData.collateralAmount} DREX`);
-          addLog(`Collateral amount: ${formData.collateralAmount} DREX`);
+          addLog(`Schedule amount: ${formData.collateralAmount} Stablecoin`);
+          addLog(`Collateral amount: ${formData.collateralAmount} Stablecoin`);
 
           const result = await approveEmissionValidator(
             formData.payableAddress,
@@ -364,7 +416,9 @@ export default function FIDCDemoPage() {
 
         try {
           addLog(`Payable approving FIDC ID: ${fidcId}`);
-          addLog(`Transferring collateral: ${formData.collateralAmount} DREX`);
+          addLog(
+            `Transferring collateral: ${formData.collateralAmount} Stablecoin`
+          );
 
           const result = await approveEmissionPayable(
             fidcId,
@@ -436,73 +490,97 @@ export default function FIDCDemoPage() {
         addLog("Approving investors...");
 
         try {
-          // Aprovar os investidores usando approveInvestor diretamente
-          // Esta função já está na interface FIDCContract
-          addLog(
-            `Approving senior investor: ${formData.seniorInvestorAddress}`
-          );
-
-          // Aprovar investidor senior (tipo 0)
+          // Obter detalhes do FIDC e o endereço da demo wallet
+          const demoWalletAddress = "0xF64749A9D8e4e4F33c9343e63797D57B80FBefd0";
+          const fidcDetails = await getFIDCDetails(fidcId);
+          
+          // Verificar se o manager aprovado é a demo wallet
+          const isManagerDemoWallet = fidcDetails.manager.toLowerCase() === demoWalletAddress.toLowerCase();
+      
+          if (isManagerDemoWallet) {
+              addLog("Manager is demo wallet - using demo wallet for investor approvals");
+          } else {
+              addLog("Manager is connected wallet - using connected wallet for investor approvals");
+          }
+      
+          // Aprovar investidor senior principal
+          addLog(`Approving senior investor: ${formData.seniorInvestorAddress}`);
           const seniorResult = await approveInvestor(
-            formData.seniorInvestorAddress,
-            0,
-            fidcId
+              formData.seniorInvestorAddress,
+              0,
+              fidcId,
+              isManagerDemoWallet // Usar demo wallet se o endereço do manager for a demo wallet
           );
-
+      
           if (seniorResult.success) {
-            addLog("Senior investor approved successfully");
+              addLog(`Senior investor approved successfully ${isManagerDemoWallet ? 'using demo wallet' : 'using connected wallet'}`);
           }
-
-          // Aprovar investidor subordinado (tipo 1)
-          addLog(
-            `Approving subordinated investor: ${formData.subInvestorAddress}`
+      
+          // Aprovar demo wallet como investidor senior
+          addLog(`Approving demo wallet as senior investor: ${demoWalletAddress}`);
+          const demoSeniorResult = await approveInvestor(
+              demoWalletAddress,
+              0,
+              fidcId,
+              isManagerDemoWallet // Usar demo wallet se o endereço do manager for a demo wallet
           );
+      
+          if (demoSeniorResult.success) {
+              addLog(`Demo wallet approved as senior investor successfully ${isManagerDemoWallet ? 'using demo wallet' : 'using connected wallet'}`);
+          }
+      
+          // Aprovar investidor subordinado principal
+          addLog(`Approving subordinated investor: ${formData.subInvestorAddress}`);
           const subResult = await approveInvestor(
-            formData.subInvestorAddress,
-            1,
-            fidcId
+              formData.subInvestorAddress,
+              1,
+              fidcId,
+              isManagerDemoWallet // Usar demo wallet se o endereço do manager for a demo wallet
           );
-
+      
           if (subResult.success) {
-            addLog("Subordinated investor approved successfully");
+              addLog(`Subordinated investor approved successfully ${isManagerDemoWallet ? 'using demo wallet' : 'using connected wallet'}`);
           }
-
+      
+          // Aprovar demo wallet como investidor subordinado
+          addLog(`Approving demo wallet as subordinated investor: ${demoWalletAddress}`);
+          const demoSubResult = await approveInvestor(
+              demoWalletAddress,
+              1,
+              fidcId,
+              isManagerDemoWallet // Usar demo wallet se o endereço do manager for a demo wallet
+          );
+      
+          if (demoSubResult.success) {
+              addLog(`Demo wallet approved as subordinated investor successfully ${isManagerDemoWallet ? 'using demo wallet' : 'using connected wallet'}`);
+          }
+      
           // Financiar as carteiras dos investidores com DREX
           addLog("Funding investor wallets with tokens...");
-
+      
           // Financiar carteira do investidor sênior
-          const seniorFundingAmount = (
-            formData.seniorInvestAmount * 1.1
-          ).toString(); // 10% a mais para garantir
-          await fundInvestorWallet(
-            formData.seniorInvestorAddress,
-            seniorFundingAmount
-          );
-
+          const seniorFundingAmount = (formData.seniorInvestAmount * 1.1).toString();
+          await fundInvestorWallet(formData.seniorInvestorAddress, seniorFundingAmount);
+      
           // Financiar carteira do investidor subordinado
-          const subFundingAmount = (formData.subInvestAmount * 1.1).toString(); // 10% a mais para garantir
-          await fundInvestorWallet(
-            formData.subInvestorAddress,
-            subFundingAmount
-          );
-
-          if (seniorResult.success && subResult.success) {
-            setCurrentStep(5);
-            addLog("All investors approved and funded successfully!");
+          const subFundingAmount = (formData.subInvestAmount * 1.1).toString();
+          await fundInvestorWallet(formData.subInvestorAddress, subFundingAmount);
+      
+          // Também financiar a carteira demo
+          addLog("Funding demo wallet with tokens...");
+          await fundInvestorWallet(demoWalletAddress, (formData.seniorInvestAmount * 1.1).toString());
+      
+          if (seniorResult.success && subResult.success && demoSeniorResult.success && demoSubResult.success) {
+              setCurrentStep(5);
+              addLog("All investors approved and funded successfully!");
           } else {
-            addLog(
-              "Failed to approve one or more investors. Check console for details."
-            );
+              addLog("Failed to approve one or more investors. Check console for details.");
           }
-        } catch (error) {
-          addLog(
-            `Error approving investors: ${
-              error instanceof Error ? error.message : String(error)
-            }`
-          );
-        } finally {
+      } catch (error) {
+          addLog(`Error approving investors: ${error instanceof Error ? error.message : String(error)}`);
+      } finally {
           setProcessing(false);
-        }
+      }
       },
     },
     {
@@ -537,7 +615,7 @@ export default function FIDCDemoPage() {
         try {
           // Investimento Sênior
           addLog(
-            `Senior investor investing ${formData.seniorInvestAmount} Stable coin`
+            `Senior investor investing ${formData.seniorInvestAmount} Stable coin into FIDC ID: ${fidcId}`
           );
 
           // Verificar se estamos conectados como o investidor sênior
@@ -584,7 +662,7 @@ export default function FIDCDemoPage() {
 
           // Investimento Subordinado
           addLog(
-            `Subordinated investor investing ${formData.subInvestAmount} Stable coin`
+            `Subordinated investor investing ${formData.subInvestAmount} Stable coin into FIDC ID: ${fidcId}`
           );
 
           // Verificar se estamos conectados como o investidor subordinado
@@ -662,172 +740,10 @@ export default function FIDCDemoPage() {
       },
     },
     {
-      title: "Simulate Time Passing",
-      description: `Simulate ${formData.simulatedDays} days passing (grace period + investment time)`,
-      action: async () => {
-        if (!isConnected || !fidcId) {
-          addLog(
-            "Please connect your wallet and complete previous steps first"
-          );
-          return;
-        }
-
-        setProcessing(true);
-        addLog(`Simulating ${formData.simulatedDays} days passing...`);
-
-        try {
-          addLog(
-            "Note: In a real blockchain, time cannot be simulated. You would need to wait for the grace period to actually pass."
-          );
-
-          await new Promise((resolve) => setTimeout(resolve, 3000));
-
-          addLog(`${formData.simulatedDays} days have passed (simulation)`);
-          addLog("Grace period has ended");
-          addLog("Investments can now be redeemed");
-
-          setCurrentStep(7);
-        } catch (error) {
-          addLog(
-            `Error during time simulation: ${
-              error instanceof Error ? error.message : String(error)
-            }`
-          );
-        } finally {
-          setProcessing(false);
-        }
-      },
-    },
-    {
       title: "Redeem Investments",
-      description: "Investors redeem their investments with yield",
-      action: async () => {
-        if (
-          !isConnected ||
-          !fidcId ||
-          seniorInvestmentId === 0 ||
-          subInvestmentId === 0
-        ) {
-          addLog(
-            "Please connect your wallet and complete previous steps first"
-          );
-          return;
-        }
-
-        // Verificar se o endereço conectado é um dos investidores aprovados
-        const { ethers } = await import("ethers");
-        const isSeniorInvestor =
-          address?.toLowerCase() ===
-          formData.seniorInvestorAddress.toLowerCase();
-        const isSubInvestor =
-          address?.toLowerCase() === formData.subInvestorAddress.toLowerCase();
-
-        if (!isSeniorInvestor && !isSubInvestor) {
-          addLog(
-            `Warning: You should be connected with one of the approved investor wallets:`
-          );
-          addLog(`- Senior Investor: ${formData.seniorInvestorAddress}`);
-          addLog(`- Subordinated Investor: ${formData.subInvestorAddress}`);
-          // We don't block, just warn in demo mode
-        }
-
-        setProcessing(true);
-        addLog("Processing redemptions...");
-
-        try {
-          const seniorPrincipal = formData.seniorInvestAmount;
-          const seniorAnnualRate =
-            (formData.annualYield + formData.seniorSpread) / BPS_DENOMINATOR;
-          const timeInYears = formData.simulatedDays / 365;
-          const seniorGrossYield =
-            seniorPrincipal * seniorAnnualRate * timeInYears;
-          const seniorFee = seniorGrossYield * (formData.fee / BPS_DENOMINATOR);
-          const seniorNetYield = seniorGrossYield - seniorFee;
-          const seniorTotal = seniorPrincipal + seniorNetYield;
-
-          addLog("Senior investor redemption expected calculation:");
-          addLog(`Principal: ${seniorPrincipal.toFixed(2)} Stable coin`);
-          addLog(`Gross yield: ${seniorGrossYield.toFixed(2)} Stable coin`);
-          addLog(`Manager fee: ${seniorFee.toFixed(2)} Stable coin`);
-          addLog(`Net yield: ${seniorNetYield.toFixed(2)} Stable coin`);
-          addLog(
-            `Total expected repayment: ${seniorTotal.toFixed(2)} Stable coin`
-          );
-
-          addLog("Redeeming senior investment...");
-
-          // Verificar se estamos conectados como o investidor sênior
-          let seniorResult: { success: boolean } = { success: false };
-          if (isSeniorInvestor) {
-            seniorResult = await redeem(
-              fidcId,
-              seniorInvestmentId,
-              formData.seniorInvestAmount.toString()
-            );
-          } else {
-            addLog(
-              "Warning: We're not connected as the senior investor. In production, this operation would fail."
-            );
-            // Na demonstração, fingimos que o resgate foi bem-sucedido
-            seniorResult = { success: true };
-          }
-
-          if (seniorResult.success) {
-            addLog("Senior investment redeemed successfully");
-          }
-
-          const subPrincipal = formData.subInvestAmount;
-          const subAnnualRate = formData.annualYield / BPS_DENOMINATOR;
-          const subGrossYield = subPrincipal * subAnnualRate * timeInYears;
-          const subFee = subGrossYield * (formData.fee / BPS_DENOMINATOR);
-          const subNetYield = subGrossYield - subFee;
-          const subTotal = subPrincipal + subNetYield;
-
-          addLog("Subordinated investor redemption expected calculation:");
-          addLog(`Principal: ${subPrincipal.toFixed(2)} Stablecoin`);
-          addLog(`Gross yield: ${subGrossYield.toFixed(2)} Stablecoin`);
-          addLog(`Manager fee: ${subFee.toFixed(2)} Stablecoin`);
-          addLog(`Net yield: ${subNetYield.toFixed(2)} Stablecoin`);
-          addLog(`Total expected repayment: ${subTotal.toFixed(2)} Stablecoin`);
-
-          addLog("Redeeming subordinated investment...");
-
-          // Verificar se estamos conectados como o investidor subordinado
-          let subResult: { success: boolean } = { success: false };
-          if (isSubInvestor) {
-            subResult = await redeem(
-              fidcId,
-              subInvestmentId,
-              formData.subInvestAmount.toString()
-            );
-          } else {
-            addLog(
-              "Warning: We're not connected as the subordinated investor. In production, this operation would fail."
-            );
-            // Na demonstração, fingimos que o resgate foi bem-sucedido
-            subResult = { success: true };
-          }
-
-          if (subResult.success) {
-            addLog("Subordinated investment redeemed successfully");
-          }
-
-          if (seniorResult.success && subResult.success) {
-            setCurrentStep(8);
-          } else {
-            addLog(
-              "Failed to complete one or more redemptions. Check console for details."
-            );
-          }
-        } catch (error) {
-          addLog(
-            `Error processing redemptions: ${
-              error instanceof Error ? error.message : String(error)
-            }`
-          );
-        } finally {
-          setProcessing(false);
-        }
+      description: "Go to Investor Portal to redeem investments",
+      action: () => {
+        window.location.href = "/investor";
       },
     },
     {
@@ -844,7 +760,7 @@ export default function FIDCDemoPage() {
     },
     {
       title: "FIDC State Management",
-      description: "Administrative actions: Stop FIDC or Start Liquidation",
+      description: "Administrative actions: Stop FIDC",
       action: async () => {
         addLog("This step offers administrative actions for the FIDC manager");
       },
@@ -994,7 +910,10 @@ export default function FIDCDemoPage() {
                   try {
                     setProcessing(true);
                     addLog("Funding validator wallet...");
-                    await fundInvestorWallet(formData.validatorAddress, "1000");
+                    await fundInvestorWallet(
+                      formData.validatorAddress,
+                      mintAmount
+                    );
                     addLog("Validator wallet funded!");
                     updateStablecoinBalances();
                   } catch (err) {
@@ -1022,7 +941,7 @@ export default function FIDCDemoPage() {
                     addLog("Funding payable company wallet...");
                     await fundInvestorWallet(
                       formData.payableAddress,
-                      formData.collateralAmount.toString()
+                      mintAmount
                     );
                     addLog("Payable wallet funded!");
                     updateStablecoinBalances();
@@ -1053,16 +972,24 @@ export default function FIDCDemoPage() {
               </label>
               <input
                 type="text"
-                value={address || ""}
-                disabled={true}
-                className="w-full p-2 border rounded bg-blue-50 border-blue-300"
+                name="managerAddress"
+                value={formData.managerAddress}
+                onChange={(e) =>
+                  setFormData({ ...formData, managerAddress: e.target.value })
+                }
+                disabled={currentStep > 0}
+                className={`w-full p-2 border rounded ${
+                  formData.managerAddress === address
+                    ? "bg-blue-50 border-blue-300"
+                    : ""
+                }`}
                 placeholder="0x..."
               />
               <p className="text-sm mt-1 flex justify-between">
-                <span className="text-gray-500">
-                  Endereço do gestor (sua carteira conectada)
-                </span>
-                <span className="text-blue-600 font-medium">Você</span>
+                <span className="text-gray-500">Endereço do gestor</span>
+                {formData.managerAddress === address && (
+                  <span className="text-blue-600 font-medium">Você</span>
+                )}
               </p>
             </div>
 
@@ -1184,6 +1111,21 @@ export default function FIDCDemoPage() {
               </p>
             </div>
 
+            <div>
+              <label className="block text-sm font-medium mb-1">FIDC ID</label>
+              <input
+                type="number"
+                value={fidcId || 1}
+                onChange={(e) => setFidcId(Number(e.target.value))}
+                disabled={currentStep > 0}
+                className="w-full p-2 border rounded"
+                min="1"
+              />
+              <p className="text-sm text-gray-500 mt-1">
+                Unique identifier for this FIDC instance
+              </p>
+            </div>
+
             <div className="my-4 border-b border-gray-200"></div>
 
             <div>
@@ -1239,22 +1181,32 @@ export default function FIDCDemoPage() {
 
             <div>
               <label className="block text-sm font-medium mb-1">
-                Grace Period (Days)
+                Grace Period (seconds)
               </label>
               <input
                 type="number"
                 name="gracePeriod"
-                value={formData.gracePeriod / (24 * 60 * 60)}
+                value={formData.gracePeriod}
                 onChange={(e) => {
-                  const days = Number(e.target.value);
+                  const seconds = Number(e.target.value);
+                  // Garantir que o valor mínimo seja 35 segundos
+                  const validSeconds = Math.max(35, seconds);
                   setFormData({
                     ...formData,
-                    gracePeriod: days * 24 * 60 * 60,
+                    gracePeriod: validSeconds,
                   });
                 }}
                 disabled={currentStep > 0}
                 className="w-full p-2 border rounded"
+                min="35"
               />
+              <p className="text-sm text-gray-500 mt-1">
+                {`${formData.gracePeriod} seconds (${Math.floor(
+                  formData.gracePeriod / 86400
+                )} days and ${Math.floor(
+                  (formData.gracePeriod % 86400) / 3600
+                )} hours)`}
+              </p>
             </div>
 
             <div>
@@ -1295,20 +1247,6 @@ export default function FIDCDemoPage() {
                 value={formData.subInvestAmount}
                 onChange={handleInputChange}
                 disabled={currentStep > 4}
-                className="w-full p-2 border rounded"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                Simulation Time (Days)
-              </label>
-              <input
-                type="number"
-                name="simulatedDays"
-                value={formData.simulatedDays}
-                onChange={handleInputChange}
-                disabled={currentStep > 5}
                 className="w-full p-2 border rounded"
               />
             </div>
@@ -1477,7 +1415,7 @@ export default function FIDCDemoPage() {
             <p className="mb-3">
               The FIDC manager can perform these actions at any time:
             </p>
-            <div className="flex space-x-4">
+            <div>
               <button
                 onClick={async () => {
                   if (!fidcId) return;
@@ -1514,44 +1452,6 @@ export default function FIDCDemoPage() {
                 disabled={processing || isProcessing}
               >
                 Stop FIDC
-              </button>
-
-              <button
-                onClick={async () => {
-                  if (!fidcId) return;
-
-                  setProcessing(true);
-                  addLog("Starting liquidation of FIDC...");
-
-                  try {
-                    const result = await initiateLiquidation(fidcId);
-                    if (result.success) {
-                      addLog(
-                        `Liquidation of FIDC ${fidcId} started successfully. Status now is LIQUIDATED.`
-                      );
-
-                      // Atualizar detalhes após a operação
-                      const details = await getFIDCDetails(fidcId);
-                      addLog(
-                        `Status confirmed: ${getStatusString(details.status)}`
-                      );
-                    } else {
-                      addLog("Failed to start liquidation of FIDC.");
-                    }
-                  } catch (error) {
-                    addLog(
-                      `Error starting liquidation: ${
-                        error instanceof Error ? error.message : String(error)
-                      }`
-                    );
-                  } finally {
-                    setProcessing(false);
-                  }
-                }}
-                className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded disabled:bg-gray-300 disabled:cursor-not-allowed"
-                disabled={processing || isProcessing}
-              >
-                Start Liquidation
               </button>
             </div>
           </div>
