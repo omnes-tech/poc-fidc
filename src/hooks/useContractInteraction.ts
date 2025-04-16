@@ -1054,6 +1054,66 @@ export function useContractInteraction() {
     [getContracts]
   );
 
+  const compensationPay = useCallback(
+    async (fidcId: number, amount: string, useDemoWallet = false) => {
+      setIsProcessing(true);
+      setError(null);
+
+      try {
+        const { drexContract, fidcContract, signer } = await getContracts(useDemoWallet);
+        const currentAddress = useDemoWallet ? signer.address : address;
+
+        if (!amount || isNaN(Number(amount))) {
+          throw new Error("Valor inválido");
+        }
+
+        const amountBigInt = ethers.parseEther(amount);
+
+        // Aprovar o token DREX primeiro
+        console.log(`Aprovando ${amount} Stablecoin para o contrato FIDC...`);
+        const approveGasLimit = 1000000;
+        
+        const approveTx = await drexContract.approve(
+          FIDC_Management_address,
+          amountBigInt,
+          { gasLimit: approveGasLimit }
+        );
+        await approveTx.wait();
+        console.log("Aprovação do Stablecoin concluída");
+
+        // Executar o compensationPay
+        console.log(`Executando compensationPay de ${amount} Stablecoin...`);
+        const tx = await fidcContract.compensationPay(fidcId, amountBigInt, {
+          gasLimit: 3000000,
+        });
+
+        const receipt = await tx.wait();
+        return { success: true, receipt };
+      } catch (err) {
+        console.error("Error in compensation pay:", err);
+        setError(err instanceof Error ? err.message : "Unknown error occurred");
+        return { success: false, error: err };
+      } finally {
+        setIsProcessing(false);
+      }
+    },
+    [getContracts, address]
+  );
+
+  const getFIDCScheduleAmount = useCallback(
+    async (fidcId: number, useDemoWallet = false) => {
+      try {
+        const { fidcContract } = await getContracts(useDemoWallet);
+        const amount = await fidcContract.fidcScheduleAmount(fidcId);
+        return ethers.formatEther(amount);
+      } catch (err) {
+        console.error("Error getting FIDC schedule amount:", err);
+        throw err;
+      }
+    },
+    [getContracts]
+  );
+
   return {
     isProcessing,
     txHash,
@@ -1078,5 +1138,7 @@ export function useContractInteraction() {
     initiateLiquidation,
     getAllInvestors,
     getContracts,
+    compensationPay,
+    getFIDCScheduleAmount,
   };
 }

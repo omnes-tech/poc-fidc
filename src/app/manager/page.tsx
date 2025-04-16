@@ -65,6 +65,8 @@ export default function ManagerPage() {
     getFIDCDetails,
     getAllInvestors,
     redeemAllManager,
+    compensationPay,
+    getFIDCScheduleAmount,
   } = useContractInteraction();
 
   const [logs, setLogs] = useState<string[]>([]);
@@ -112,6 +114,9 @@ export default function ManagerPage() {
     string[]
   >([]);
   const [newRedeemAddress, setNewRedeemAddress] = useState<string>("");
+
+  // Adicionar novo estado para armazenar o valor do schedule amount
+  const [scheduleAmount, setScheduleAmount] = useState<string>("");
 
   useEffect(() => {
     if (useDemoAccount) {
@@ -363,18 +368,20 @@ export default function ManagerPage() {
         if (result.receipt) {
           const events = result.receipt.logs
             .filter(
-              (log) =>
+              (log: any) =>
                 log.topics[0] === ethers.id("Transfer(address,address,uint256)")
             )
-            .map((log, index) => {
-              const event = {
+            .map((log: any, index) => {
+              return {
                 type: "Transfer",
                 from: `0x${log.topics[1].slice(-40)}`,
                 to: `0x${log.topics[2].slice(-40)}`,
                 amount: ethers.formatEther(log.data),
-                description: getEventDescription(index, currentFidcId),
+                description:
+                  index === 0
+                    ? "Transferência de pagamento do adiquiriente"
+                    : "Queima dos recebiveis apos pagamento do adiquirente",
               };
-              return event;
             });
 
           setTransactionDetails({
@@ -820,6 +827,98 @@ export default function ManagerPage() {
       console.error("Error in manager redemption:", error);
       addLog(
         `Erro durante o resgate manager: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  // Adicionar função para carregar o schedule amount quando o FIDC ID mudar
+  const loadScheduleAmount = async (fidcId: number) => {
+    try {
+      const amount = await getFIDCScheduleAmount(fidcId, useDemoAccount);
+      setScheduleAmount(amount);
+      setFormData((prev) => ({ ...prev, amount })); // Atualiza automaticamente o input
+      addLog(`Valor da emissão do FIDC ${fidcId}: ${amount} Stablecoin`);
+    } catch (error) {
+      addLog(
+        `Erro ao carregar valor da emissão: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
+  };
+
+  // Adicionar junto com as outras funções de manipulação no ManagerPage
+  const handleCompensationPay = async (fidcId: number, amount: string) => {
+    if (!isConnected && !useDemoAccount) {
+      addLog("Por favor conecte sua carteira primeiro");
+      return;
+    }
+
+    setProcessing(true);
+    try {
+      // Primeiro, vamos verificar se o valor corresponde ao fidcScheduleAmount
+      const scheduleAmount = await getFIDCScheduleAmount(
+        fidcId,
+        useDemoAccount
+      );
+
+      if (amount !== scheduleAmount) {
+        addLog(
+          `Erro: O valor deve ser exatamente ${scheduleAmount} Stablecoin`
+        );
+        return;
+      }
+
+      // Financiar a carteira com tokens para o pagamento
+      addLog("Financiando carteira com Stablecoin para o pagamento...");
+      const currentAddress = useDemoAccount ? DEMO_WALLET_ADDRESS : address;
+      await fundInvestorWallet(currentAddress!, amount, useDemoAccount);
+      addLog("Carteira financiada com sucesso!");
+
+      // Executar o compensationPay
+      addLog(
+        `Iniciando compensationPay de ${amount} Stablecoin para FIDC ${fidcId}...`
+      );
+      const result = await compensationPay(fidcId, amount, useDemoAccount);
+
+      if (result.success) {
+        addLog("Pagamento do adiquiriente realizado com sucesso!");
+
+        // Se houver receipt com eventos, podemos processá-los
+        if (result.receipt) {
+          const events = result.receipt.logs
+            .filter(
+              (log: any) =>
+                log.topics[0] === ethers.id("Transfer(address,address,uint256)")
+            )
+            .map((log: any, index) => {
+              return {
+                type: "Transfer",
+                from: `0x${log.topics[1].slice(-40)}`,
+                to: `0x${log.topics[2].slice(-40)}`,
+                amount: ethers.formatEther(log.data),
+                description:
+                  index === 0
+                    ? "Transferência de pagamento do adiquiriente"
+                    : "Queima dos recebiveis apos pagamento do adiquirente",
+              };
+            });
+
+          setTransactionDetails({
+            hash: result.receipt.hash,
+            events: events,
+          });
+        }
+      } else {
+        throw new Error("Falha no pagamento do adiquiriente");
+      }
+    } catch (error) {
+      addLog(
+        `Erro durante o pagamento do adiquiriente: ${
           error instanceof Error ? error.message : String(error)
         }`
       );
@@ -1480,6 +1579,103 @@ export default function ManagerPage() {
               Limpar Lista
             </button>
           )}
+        </div>
+      </div>
+
+      {/* Nova seção de Compensation Pay */}
+      <div className="mt-6 bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <h2 className="text-xl font-semibold mb-4">
+          Pagamento do Adiquiriente
+        </h2>
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">FIDC ID</label>
+            <input
+              type="number"
+              value={fidcId}
+              onChange={(e) => {
+                const newFidcId = Number(e.target.value);
+                setFidcId(newFidcId);
+                loadScheduleAmount(newFidcId); // Carrega o valor automaticamente
+              }}
+              className="w-full p-2 border rounded"
+              min="1"
+              placeholder="Digite o ID do FIDC"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">
+              Amount (Stablecoin)
+            </label>
+            <input
+              type="text"
+              value={formData.amount}
+              readOnly // Torna o campo somente leitura
+              className="w-full p-2 border rounded bg-gray-50"
+              placeholder="Valor será preenchido automaticamente"
+            />
+          </div>
+
+          <div className="bg-blue-50 border-l-4 border-blue-400 p-4 mb-4">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <svg
+                  className="h-5 w-5 text-blue-400"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <p className="text-sm text-blue-700">
+                  O valor será automaticamente definido com base no valor da
+                  emissão do FIDC
+                </p>
+                {scheduleAmount && (
+                  <p className="text-sm text-blue-600 mt-1">
+                    Valor da emissão: {scheduleAmount} Stablecoin
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <button
+            onClick={() => handleCompensationPay(fidcId, formData.amount)}
+            disabled={
+              processing ||
+              isProcessing ||
+              (!isConnected && !useDemoAccount) ||
+              !scheduleAmount // Desabilita se não tiver o valor carregado
+            }
+            className="w-full px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:bg-gray-400"
+          >
+            {processing || isProcessing
+              ? "Processing..."
+              : "Execute Compensation Pay"}
+          </button>
+
+          <div className="mt-4 text-sm text-gray-600">
+            <h3 className="font-medium mb-2">Instruções:</h3>
+            <ul className="list-disc pl-5 space-y-1">
+              <li>
+                O valor será automaticamente definido com base na emissão do
+                FIDC
+              </li>
+              <li>
+                Será necessário aprovar o uso do token Stablecoin primeiro
+              </li>
+              <li>A transação será executada após a aprovação do token</li>
+              <li>Os eventos da transação serão exibidos após a conclusão</li>
+            </ul>
+          </div>
         </div>
       </div>
     </div>
