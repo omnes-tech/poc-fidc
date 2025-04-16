@@ -11,6 +11,20 @@ export interface FIDCContract extends BaseContract {
     _seniorSpread: number | bigint
   ): Promise<any>;
 
+  getAllInvestors(
+    _fidcId: number | bigint
+  ): Promise<any>;
+
+  compensationPay(
+    _fidcId: number | bigint,
+    _amount: bigint,
+    overrides?: any
+  ): Promise<any>;
+
+  fidcScheduleAmount(
+    _fidcId: number | bigint
+  ): Promise<any>;
+
   approvedEmissionValidator(
     _pj: string,
     _fidcId: number | bigint,

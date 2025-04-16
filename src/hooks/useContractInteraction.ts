@@ -369,15 +369,13 @@ export function useContractInteraction() {
       scheduleAmount: string,
       collateralAmount: string,
       isApproved: boolean,
-      useDemoWallet = true // Adicionar este parâmetro
+      useDemoWallet = false
     ) => {
       setIsProcessing(true);
       setError(null);
 
       try {
         const { fidcContract } = await getContracts(useDemoWallet);
-        const provider = new ethers.BrowserProvider(window.ethereum);
-        const signer = await provider.getSigner();
 
         console.log(`\n=== VALIDATOR APPROVAL DEBUG ===`);
         console.log(`FIDC ID: ${fidcId}`);
@@ -386,19 +384,13 @@ export function useContractInteraction() {
         console.log(`Collateral Amount: ${collateralAmount} Stablecoin`);
         console.log(`Is Approved: ${isApproved}`);
         console.log(`Gas Limit: ${gasLimit}`);
-        console.log(`Caller Address: ${address}`);
+        console.log(`Using ${useDemoWallet ? 'demo wallet' : 'connected wallet'}`);
         console.log(`============================\n`);
 
         const scheduleAmountBigInt = ethers.parseEther(scheduleAmount);
         const collateralAmountBigInt = ethers.parseEther(collateralAmount);
 
-        const contract = new ethers.Contract(
-          FIDC_Management_address,
-          fidc_abi,
-          signer
-        );
-
-        const tx = await contract.approvedEmissionValidator(
+        const tx = await fidcContract.approvedEmissionValidator(
           pj,
           fidcId,
           scheduleAmountBigInt,
@@ -416,57 +408,42 @@ export function useContractInteraction() {
         return { success: true, receipt };
       } catch (err: any) {
         console.error("Error approving emission (validator):", err);
-
-        if (err.code === -32603) {
-          setError(
-            "Internal JSON-RPC error. Try with different parameters or contact support."
-          );
-        } else if (
-          err.message &&
-          err.message.includes("gas required exceeds")
-        ) {
-          setError(
-            "Transaction needs more gas than provided. Try increasing gas limit."
-          );
-        } else if (err.message && err.message.includes("user rejected")) {
-          setError("Transaction was rejected in your wallet.");
-        } else if (err.message && err.message.includes("insufficient funds")) {
-          setError("You don't have enough ETH to pay for gas fees.");
-        } else {
-          setError(
-            err instanceof Error ? err.message : "Unknown error occurred"
-          );
-        }
-
+        setError(err instanceof Error ? err.message : "Unknown error occurred");
         return { success: false, error: err };
       } finally {
         setIsProcessing(false);
       }
     },
-    [getContracts, address, gasLimit]
+    [getContracts, gasLimit]
   );
 
   const approveEmissionPayable = useCallback(
-    async (fidcId: number, amount: string, isApproved: boolean) => {
+    async (fidcId: number, amount: string, isApproved: boolean, useDemoWallet = false) => {
       setIsProcessing(true);
       setError(null);
 
       try {
-        const { drexContract } = await getContracts();
-        const provider = new ethers.BrowserProvider(window.ethereum);
-        const signer = await provider.getSigner();
+        // Obter os contratos com o signer correto (demo ou conectado)
+        const { drexContract, fidcContract, signer } = await getContracts(useDemoWallet);
+
+        console.log(`\n=== PAYABLE APPROVAL DEBUG ===`);
+        console.log(`FIDC ID: ${fidcId}`);
+        console.log(`Amount: ${amount} Stablecoin`);
+        console.log(`Is Approved: ${isApproved}`);
+        console.log(`Using ${useDemoWallet ? 'demo wallet' : 'connected wallet'}: ${signer.address}`);
+        console.log(`============================\n`);
 
         const amountBigInt = ethers.parseEther(amount);
 
+        // Aprovar o token ERC20 para ser usado pelo contrato FIDC
+        const approveGasLimit = 1000000;
+        console.log(`Usando limite de gás fixo para approve: ${approveGasLimit.toLocaleString()} unidades`);
+
+        // Usar o mesmo contrato ERC20 com o signer correto
         const erc20Contract = new ethers.Contract(
           ERC20Mock_address,
           erc20_abi,
           signer
-        );
-
-        const approveGasLimit = 1000000;
-        console.log(
-          `Usando limite de gás fixo para approve: ${approveGasLimit.toLocaleString()} unidades`
         );
 
         const approveTx = await erc20Contract.approve(
@@ -475,18 +452,18 @@ export function useContractInteraction() {
           { gasLimit: approveGasLimit }
         );
         await approveTx.wait();
+        console.log("Token approval completed");
 
-        const fidcContract = new ethers.Contract(
+        // Usar o mesmo contrato FIDC com o signer correto
+        const fidcContractWithSigner = new ethers.Contract(
           FIDC_Management_address,
           fidc_abi,
           signer
         );
 
-        console.log(
-          `Usando limite de gás fixo: ${gasLimit.toLocaleString()} unidades`
-        );
+        console.log(`Usando limite de gás fixo: ${gasLimit.toLocaleString()} unidades`);
 
-        const tx = await fidcContract.approvedEmissionPayable(
+        const tx = await fidcContractWithSigner.approvedOfficialPayable(
           fidcId,
           amountBigInt,
           isApproved,
@@ -495,6 +472,7 @@ export function useContractInteraction() {
         setTxHash(tx.hash);
 
         const receipt = await tx.wait();
+        console.log("Transaction confirmed:", receipt);
         return { success: true, receipt };
       } catch (err) {
         console.error("Error approving emission (payable):", err);
@@ -1104,6 +1082,90 @@ export function useContractInteraction() {
     [getContracts, address, gasLimit]
   );
 
+  const getAllInvestors = useCallback(
+    async (fidcId: number, useDemoWallet = false) => {
+      try {
+        const { fidcContract } = await getContracts(useDemoWallet);
+        
+        // Chamar a função do contrato que retorna os arrays
+        const result = await fidcContract.getAllInvestors(fidcId);
+        
+        // Formatar os valores retornados
+        const formattedResult = {
+          investors: result.investors,
+          isSenior: result.isSenior,
+          amounts: result.amounts.map((amount: bigint) => ethers.formatEther(amount))
+        };
+
+        return formattedResult;
+      } catch (err) {
+        console.error("Error getting investors:", err);
+        throw err;
+      }
+    },
+    [getContracts]
+  );
+
+  const compensationPay = useCallback(
+    async (fidcId: number, amount: string, useDemoWallet = false) => {
+      setIsProcessing(true);
+      setError(null);
+
+      try {
+        const { drexContract, fidcContract, signer } = await getContracts(useDemoWallet);
+        const currentAddress = useDemoWallet ? signer.address : address;
+
+        if (!amount || isNaN(Number(amount))) {
+          throw new Error("Valor inválido");
+        }
+
+        const amountBigInt = ethers.parseEther(amount);
+
+        // Aprovar o token DREX primeiro
+        console.log(`Aprovando ${amount} Stablecoin para o contrato FIDC...`);
+        const approveGasLimit = 1000000;
+        
+        const approveTx = await drexContract.approve(
+          FIDC_Management_address,
+          amountBigInt,
+          { gasLimit: approveGasLimit }
+        );
+        await approveTx.wait();
+        console.log("Aprovação do Stablecoin concluída");
+
+        // Executar o compensationPay
+        console.log(`Executando compensationPay de ${amount} Stablecoin...`);
+        const tx = await fidcContract.compensationPay(fidcId, amountBigInt, {
+          gasLimit: 3000000,
+        });
+
+        const receipt = await tx.wait();
+        return { success: true, receipt };
+      } catch (err) {
+        console.error("Error in compensation pay:", err);
+        setError(err instanceof Error ? err.message : "Unknown error occurred");
+        return { success: false, error: err };
+      } finally {
+        setIsProcessing(false);
+      }
+    },
+    [getContracts, address]
+  );
+
+  const getFIDCScheduleAmount = useCallback(
+    async (fidcId: number, useDemoWallet = false) => {
+      try {
+        const { fidcContract } = await getContracts(useDemoWallet);
+        const amount = await fidcContract.fidcScheduleAmount(fidcId);
+        return ethers.formatEther(amount);
+      } catch (err) {
+        console.error("Error getting FIDC schedule amount:", err);
+        throw err;
+      }
+    },
+    [getContracts]
+  );
+
   return {
     isProcessing,
     txHash,
@@ -1126,6 +1188,9 @@ export function useContractInteraction() {
     fundInvestorWallet,
     stopFIDC,
     initiateLiquidation,
+    getAllInvestors,
     getContracts,
+    compensationPay,
+    getFIDCScheduleAmount,
   };
 }
