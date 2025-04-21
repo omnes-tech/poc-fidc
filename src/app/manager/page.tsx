@@ -5,6 +5,8 @@ import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useContractInteraction } from "@/hooks/useContractInteraction";
 import { ethers } from "ethers";
 import Link from "next/link";
+import CapitareHeader from "@/components/CapitareHeader";
+import WalletSelector from "@/components/WalletSelector";
 
 const DEMO_WALLET_ADDRESS = "0xF64749A9D8e4e4F33c9343e63797D57B80FBefd0";
 
@@ -58,7 +60,6 @@ export default function ManagerPage() {
     approvedValidator,
     approvePayable,
     fundInvestorWallet,
-    getContracts,
     initializeFIDC,
     invest,
     approveInvestor,
@@ -102,13 +103,6 @@ export default function ManagerPage() {
   const [queryFidcId, setQueryFidcId] = useState<number>(1);
   const [loadingInvestors, setLoadingInvestors] = useState(false);
 
-  // Adicionar novos estados no início do componente ManagerPage
-  const [approvalInputs, setApprovalInputs] = useState({
-    fidcId: 1,
-    investorAddress: "",
-    isSenior: true,
-  });
-
   // Adicionar junto com os outros estados no início do componente
   const [managerRedeemAddresses, setManagerRedeemAddresses] = useState<
     string[]
@@ -117,6 +111,19 @@ export default function ManagerPage() {
 
   // Adicionar novo estado para armazenar o valor do schedule amount
   const [scheduleAmount, setScheduleAmount] = useState<string>("");
+
+  // Adicionar novo estado para a nova seção de Antecipação PJ
+  const [pjFormData, setPjFormData] = useState({
+    anticipationAmount: "100 mil",
+    fidcId: 2,
+    collateralToken: "token de garantia",
+    pjAddress: "address: 0x123",
+    collateralAmount: "120 mil tokens",
+  });
+
+  // Adicionar novo estado para os detalhes da transação da nova seção de Antecipação PJ
+  const [pjTransactionDetails, setPjTransactionDetails] =
+    useState<TransactionDetails | null>(null);
 
   useEffect(() => {
     if (useDemoAccount) {
@@ -147,11 +154,27 @@ export default function ManagerPage() {
     }
   }, [fidcInitialized, fidcId]);
 
+  useEffect(() => {
+    // If we have an address set, consider us connected
+    if (address) {
+      setIsConnected(true);
+      addLog(`Connected with wallet: ${address}`);
+    } else {
+      setIsConnected(false);
+    }
+  }, [address]);
+
   const addLog = (message: string) => {
     setLogs((prev) => [
       ...prev,
       `${new Date().toLocaleTimeString()}: ${message}`,
     ]);
+  };
+
+  // New handler for wallet selection
+  const handleSelectWallet = (walletAddress: string) => {
+    setAddress(walletAddress);
+    addLog(`Selected wallet: ${walletAddress}`);
   };
 
   // Função para fazer os approves e inicializar o FIDC
@@ -454,115 +477,10 @@ export default function ManagerPage() {
     }
   };
 
-  // Função auxiliar para obter a descrição correta de cada evento
-  const getEventDescription = (index: number, fidcId: number) => {
-    switch (index) {
-      case 0:
-        return "Envio de StableCoins ao Vault do fundo para distribuição de antecipações para PJs";
-      case 1:
-        return `Emissão de recebíveis (FIDC ${fidcId}) relacionada a quantidade solicitada de antecipação`;
-      case 2:
-        return "Quantidade de StableCoin enviada para o vault do FIDC";
-      case 3:
-        return "Quantidade de StableCoin enviada para a PJ que solicitou a antecipação";
-      default:
-        return "Transferência";
-    }
-  };
-
-  // Adicionar componente para exibir os detalhes da transação
-  const TransactionDetailsCard = () => {
-    if (!transactionDetails) return null;
-
-    return (
-      <div className="mt-6 bg-gray-50 dark:bg-gray-800 rounded-lg shadow p-6">
-        <h3 className="text-xl font-semibold mb-4">Detalhes da Transação</h3>
-
-        <div className="space-y-4">
-          <div>
-            <h4 className="text-sm font-medium text-gray-500">
-              Hash da Transação
-            </h4>
-            <div className="flex items-center space-x-2">
-              <code className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-sm font-mono break-all">
-                {transactionDetails.hash}
-              </code>
-              <a
-                href={`https://holesky.etherscan.io/tx/${transactionDetails.hash}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-500 hover:text-blue-600"
-              >
-                <svg
-                  className="w-5 h-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
-                  />
-                </svg>
-              </a>
-            </div>
-          </div>
-
-          <div>
-            <h4 className="text-sm font-medium text-gray-500 mb-2">
-              Eventos de Transferência
-            </h4>
-            <div className="space-y-3">
-              {transactionDetails.events.map((event, index) => (
-                <div
-                  key={index}
-                  className="bg-white dark:bg-gray-700 rounded-lg p-4 border border-gray-200 dark:border-gray-600"
-                >
-                  <div className="space-y-3">
-                    <div className="text-sm font-medium text-blue-600 dark:text-blue-400 mb-2">
-                      {event.description}
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 text-sm">
-                      <div>
-                        <span className="text-gray-500">De:</span>
-                        <div className="font-mono break-all">{event.from}</div>
-                      </div>
-                      <div>
-                        <span className="text-gray-500">Para:</span>
-                        <div className="font-mono break-all">{event.to}</div>
-                      </div>
-                      <div className="col-span-2">
-                        <span className="text-gray-500">Quantidade:</span>
-                        <div className="font-mono text-green-600 dark:text-green-400">
-                          {event.amount}{" "}
-                          {index === 1
-                            ? `Recebível FIDC ${fidcId}`
-                            : "StableCoin"}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  // Função auxiliar para obter o status do FIDC em string
-  const getStatusString = (status: number): string => {
-    const statuses = ["Pendente", "Ativo", "Parado", "Liquidado"];
-    return statuses[status] || "Desconhecido";
-  };
-
   // Modificar a função handleInvestment para receber o FIDC ID
   const handleInvestment = async (investmentFidcId: number) => {
-    if (!isConnected && !useDemoAccount) {
-      addLog("Por favor conecte sua carteira primeiro");
+    if (!isConnected) {
+      addLog("Por favor selecione uma carteira primeiro");
       return;
     }
 
@@ -577,7 +495,7 @@ export default function ManagerPage() {
     }
 
     setProcessing(true);
-    const currentAddress = useDemoAccount ? DEMO_WALLET_ADDRESS : address;
+    const currentAddress = address;
 
     try {
       // Primeiro, aprovar o tipo de investidor (senior ou subordinado)
@@ -592,7 +510,7 @@ export default function ManagerPage() {
         currentAddress!,
         investorType,
         investmentFidcId,
-        useDemoAccount
+        false // Don't use demo wallet
       );
 
       if (!approvalResult.success) {
@@ -605,7 +523,7 @@ export default function ManagerPage() {
       await fundInvestorWallet(
         currentAddress!,
         (Number(investmentInputs.amount) * 1.1).toString(),
-        useDemoAccount
+        false // Don't use demo wallet
       );
       addLog("Carteira financiada com sucesso!");
 
@@ -616,7 +534,7 @@ export default function ManagerPage() {
       const investResult = await invest(
         investmentFidcId,
         investmentInputs.amount,
-        useDemoAccount
+        false // Don't use demo wallet
       );
 
       if (investResult.success) {
@@ -641,7 +559,7 @@ export default function ManagerPage() {
   const loadInvestmentFIDCDetails = async (newFidcId: number) => {
     try {
       addLog(`Carregando detalhes do FIDC ${newFidcId} para investimento...`);
-      const details = await getFIDCDetails(newFidcId, useDemoAccount);
+      const details = await getFIDCDetails(newFidcId, useDemoAccount, address);
 
       if (!details) {
         throw new Error("Não foi possível obter os detalhes do FIDC");
@@ -669,7 +587,7 @@ export default function ManagerPage() {
 
     try {
       addLog(`Carregando detalhes do FIDC ${fidcId}...`);
-      const details = await getFIDCDetails(fidcId, useDemoAccount);
+      const details = await getFIDCDetails(fidcId, useDemoAccount, address);
 
       if (!details) {
         throw new Error("Não foi possível obter os detalhes do FIDC");
@@ -684,6 +602,7 @@ export default function ManagerPage() {
           err instanceof Error ? err.message : String(err)
         }`
       );
+      setFidcDetails(null);
     }
   };
 
@@ -692,7 +611,7 @@ export default function ManagerPage() {
     setLoadingInvestors(true);
     try {
       addLog(`Consultando investidores do FIDC ${fidcId}...`);
-      const data = await getAllInvestors(fidcId, useDemoAccount);
+      const data = await getAllInvestors(fidcId, useDemoAccount, address);
 
       setInvestorsData({
         investors: data.investors,
@@ -719,69 +638,10 @@ export default function ManagerPage() {
     }
   };
 
-  // Adicionar nova função para lidar com a aprovação de investidores
-  const handleInvestorApproval = async () => {
-    if (!isConnected && !useDemoAccount) {
-      addLog("Por favor conecte sua carteira primeiro");
-      return;
-    }
-
-    setProcessing(true);
-    try {
-      // Primeiro, verificar se o endereço atual é o manager do FIDC
-      const fidcDetails = await getFIDCDetails(
-        approvalInputs.fidcId,
-        useDemoAccount
-      );
-      const currentAddress = useDemoAccount ? DEMO_WALLET_ADDRESS : address;
-
-      if (!fidcDetails) {
-        throw new Error("Não foi possível obter os detalhes do FIDC");
-      }
-
-      if (fidcDetails.manager.toLowerCase() !== currentAddress?.toLowerCase()) {
-        addLog(
-          `Erro: Apenas o manager do FIDC (${fidcDetails.manager}) pode aprovar investidores`
-        );
-        return;
-      }
-
-      // Se chegou aqui, o endereço atual é o manager
-      addLog(
-        `Aprovando ${approvalInputs.investorAddress} como investidor ${
-          approvalInputs.isSenior ? "Senior" : "Subordinado"
-        } para FIDC ${approvalInputs.fidcId}...`
-      );
-
-      const result = await approveInvestor(
-        approvalInputs.investorAddress,
-        approvalInputs.isSenior ? 0 : 1,
-        approvalInputs.fidcId,
-        useDemoAccount
-      );
-
-      if (result.success) {
-        addLog("Investidor aprovado com sucesso!");
-        // Atualizar a lista de investidores após a aprovação
-        await loadInvestors(approvalInputs.fidcId);
-      } else {
-        throw new Error("Falha ao aprovar investidor");
-      }
-    } catch (error) {
-      addLog(
-        `Erro durante a aprovação do investidor: ${
-          error instanceof Error ? error.message : String(error)
-        }`
-      );
-    } finally {
-      setProcessing(false);
-    }
-  };
-
   // Adicionar junto com as outras funções de manipulação
   const handleManagerRedeemAll = async () => {
-    if (!isConnected && !useDemoAccount) {
-      addLog("Por favor conecte sua carteira primeiro");
+    if (!isConnected) {
+      addLog("Por favor selecione uma carteira primeiro");
       return;
     }
 
@@ -796,15 +656,12 @@ export default function ManagerPage() {
     );
 
     try {
-      // Verificar se é o manager usando a conta de demonstração ou a carteira conectada
-      const details = await getFIDCDetails(fidcId, useDemoAccount);
-      const currentAddress = useDemoAccount ? DEMO_WALLET_ADDRESS : address;
+      // Verificar se é o manager usando a carteira selecionada
+      const details = await getFIDCDetails(fidcId, false); // Don't use demo wallet
+      const currentAddress = address;
 
-      if (details.manager.toLowerCase() !== currentAddress?.toLowerCase()) {
-        const message = useDemoAccount
-          ? "Conta de demonstração não é o manager deste FIDC"
-          : "Você não é o manager deste FIDC";
-        throw new Error(message);
+      if (details?.manager.toLowerCase() !== currentAddress?.toLowerCase()) {
+        throw new Error("Você não é o manager deste FIDC");
       }
 
       addLog(
@@ -813,7 +670,7 @@ export default function ManagerPage() {
       const result = await redeemAllManager(
         fidcId,
         managerRedeemAddresses,
-        useDemoAccount
+        false // Don't use demo wallet
       );
 
       if (result.success) {
@@ -837,7 +694,11 @@ export default function ManagerPage() {
   // Adicionar função para carregar o schedule amount quando o FIDC ID mudar
   const loadScheduleAmount = async (fidcId: number) => {
     try {
-      const amount = await getFIDCScheduleAmount(fidcId, useDemoAccount);
+      const amount = await getFIDCScheduleAmount(
+        fidcId,
+        useDemoAccount,
+        address
+      );
       setScheduleAmount(amount);
       setFormData((prev) => ({ ...prev, amount })); // Atualiza automaticamente o input
       addLog(`Valor da emissão do FIDC ${fidcId}: ${amount} Stablecoin`);
@@ -852,8 +713,8 @@ export default function ManagerPage() {
 
   // Adicionar junto com as outras funções de manipulação no ManagerPage
   const handleCompensationPay = async (fidcId: number, amount: string) => {
-    if (!isConnected && !useDemoAccount) {
-      addLog("Por favor conecte sua carteira primeiro");
+    if (!isConnected) {
+      addLog("Por favor selecione uma carteira primeiro");
       return;
     }
 
@@ -862,7 +723,7 @@ export default function ManagerPage() {
       // Primeiro, vamos verificar se o valor corresponde ao fidcScheduleAmount
       const scheduleAmount = await getFIDCScheduleAmount(
         fidcId,
-        useDemoAccount
+        false // Don't use demo wallet
       );
 
       if (amount !== scheduleAmount) {
@@ -874,15 +735,15 @@ export default function ManagerPage() {
 
       // Financiar a carteira com tokens para o pagamento
       addLog("Financiando carteira com Stablecoin para o pagamento...");
-      const currentAddress = useDemoAccount ? DEMO_WALLET_ADDRESS : address;
-      await fundInvestorWallet(currentAddress!, amount, useDemoAccount);
+      const currentAddress = address;
+      await fundInvestorWallet(currentAddress!, amount, false); // Don't use demo wallet
       addLog("Carteira financiada com sucesso!");
 
       // Executar o compensationPay
       addLog(
         `Iniciando compensationPay de ${amount} Stablecoin para FIDC ${fidcId}...`
       );
-      const result = await compensationPay(fidcId, amount, useDemoAccount);
+      const result = await compensationPay(fidcId, amount, false); // Don't use demo wallet
 
       if (result.success) {
         addLog("Pagamento do adiquiriente realizado com sucesso!");
@@ -926,131 +787,863 @@ export default function ManagerPage() {
     }
   };
 
+  // Adicionar nova função para lidar com a antecipação de recebíveis para PJ
+  const handlePjAnticipation = async () => {
+    if (!isConnected) {
+      addLog("Por favor selecione uma carteira primeiro");
+      return;
+    }
+
+    setProcessing(true);
+    try {
+      // Always use the selected wallet - no fallback to demo
+      const currentAddress = address;
+      const fidcIdValue = pjFormData.fidcId;
+      const anticipationAmount = pjFormData.anticipationAmount.replace(
+        " mil",
+        "000"
+      );
+      const collateralAmount = pjFormData.collateralAmount.replace(
+        " mil tokens",
+        "000"
+      );
+      const pjAddress = pjFormData.pjAddress.replace("address: ", "");
+
+      addLog(`Iniciando antecipação de recebíveis para PJ...`);
+      addLog(`FIDC ID: ${fidcIdValue}`);
+      addLog(`Endereço da PJ: ${pjAddress}`);
+      addLog(`Valor da antecipação: ${anticipationAmount} Stablecoin`);
+      addLog(`Valor da garantia: ${collateralAmount} tokens`);
+
+      // 1. Verificar se o FIDC existe e está ativo
+      addLog(`Verificando status do FIDC ${fidcIdValue}...`);
+      const fidcDetails = await getFIDCDetails(fidcIdValue, false); // Don't use demo wallet
+
+      if (!fidcDetails || fidcDetails.status !== 1) {
+        throw new Error(`FIDC ${fidcIdValue} não existe ou não está ativo`);
+      }
+
+      addLog(`FIDC ${fidcIdValue} está ativo e pronto para processamento`);
+
+      // 2. Financiar o contrato do FIDC com tokens para a antecipação
+      addLog(
+        `Financiando contrato do FIDC com ${anticipationAmount} Stablecoin...`
+      );
+      await fundInvestorWallet(
+        fidcDetails.payableAddress,
+        anticipationAmount,
+        false // Don't use demo wallet
+      );
+      addLog("Contrato do FIDC financiado com sucesso!");
+
+      // 3. Transferir tokens para a PJ (simulação da antecipação)
+      addLog(
+        `Transferindo ${anticipationAmount} Stablecoin para a PJ (${pjAddress})...`
+      );
+      await fundInvestorWallet(
+        pjAddress,
+        anticipationAmount,
+        false // Don't use demo wallet
+      );
+      addLog("Tokens transferidos para a PJ com sucesso!");
+
+      // 4. Simular a criação de recebíveis relacionados à garantia
+      addLog("Criando recebíveis relacionados à garantia...");
+      // Código apenas para simulação - em um ambiente real, isso seria uma chamada
+      // para um contrato inteligente que registraria os recebíveis
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      addLog("Recebíveis criados com sucesso!");
+
+      // 5. Simular a transferência do spread para os investidores
+      const spreadAmount = "20000"; // 20 mil de spread
+      addLog(
+        `Transferindo ${spreadAmount} Stablecoin como spread para os investidores...`
+      );
+      // Em um ambiente real, esse valor seria distribuído para os investidores
+      // com base em suas participações no FIDC
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      addLog("Spread transferido com sucesso!");
+
+      // Gerar um hash de transação fictício para simulação
+      // Em um ambiente real, isso seria o hash real da transação
+      const txHash =
+        "0x" +
+        Array.from({ length: 64 }, () =>
+          Math.floor(Math.random() * 16).toString(16)
+        ).join("");
+
+      // Atualizar o estado pjTransactionDetails com os detalhes da transação
+      setPjTransactionDetails({
+        hash: txHash,
+        events: [
+          {
+            type: "Transfer",
+            from: fidcDetails.payableAddress,
+            to: pjAddress,
+            amount: anticipationAmount.replace("000", " mil"),
+            description: "Transferência do fundo para solicitante PJ",
+          },
+          {
+            type: "Receivable",
+            from: pjAddress,
+            to: fidcDetails.payableAddress,
+            amount: collateralAmount.replace("000", " mil"),
+            description: "Recebível criado relacionado à garantia definida",
+          },
+          {
+            type: "Spread",
+            from: fidcDetails.payableAddress,
+            to: fidcDetails.manager,
+            amount: "20 mil",
+            description: "Valor de spread destinado aos investidores",
+          },
+        ],
+      });
+
+      addLog("Antecipação de recebíveis concluída com sucesso!");
+      addLog(`Hash da transação: ${txHash}`);
+    } catch (error) {
+      addLog(
+        `Erro durante a aprovação de antecipação de recebíveis para PJ: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    } finally {
+      setProcessing(false);
+    }
+  };
+
   return (
-    <div className="container mx-auto p-4 max-w-7xl">
-      <nav className="mb-8">
-        <Link
-          href="/"
-          className="text-blue-600 hover:text-blue-800 flex items-center"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className="h-5 w-5 mr-1"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M15 19l-7-7 7-7"
-            />
-          </svg>
-          Back to Home
-        </Link>
-      </nav>
+    <div className="capitare-gradient-bg min-h-screen pt-20 pb-12">
+      <CapitareHeader />
 
-      <h1 className="text-3xl font-bold mb-6">FIDC Manager Portal</h1>
+      <div className="capitare-container mx-auto px-4">
+        <h1 className="capitare-section-title text-center mb-12">
+          FIDC Management Platform
+        </h1>
 
-      <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-2 mb-4">
-        <div className="flex items-center">
-          <label className="inline-flex items-center cursor-pointer">
-            <input
-              type="checkbox"
-              className="sr-only peer"
-              checked={useDemoAccount}
-              onChange={() => setUseDemoAccount(!useDemoAccount)}
-            />
-            <div className="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
-            <span className="ms-3 text-sm font-medium text-gray-900 dark:text-gray-300">
-              Usar conta de demonstração
-            </span>
-          </label>
-          {useDemoAccount && (
-            <span className="ml-2 text-xs text-gray-500">
-              ({DEMO_WALLET_ADDRESS.slice(0, 6)}...
-              {DEMO_WALLET_ADDRESS.slice(-4)})
-            </span>
-          )}
+        <p className="text-center text-white mb-8 max-w-3xl mx-auto">
+          Capitare offers a simple and intuitive process for investing in high
+          potential opportunities. See below the steps to start investing with
+          Capitare.
+        </p>
+
+        {/* Wallet Selector */}
+        <div className="mb-8">
+          <WalletSelector
+            onSelectWallet={handleSelectWallet}
+            selectedWallet={address}
+          />
         </div>
 
-        {!useDemoAccount && <ConnectButton />}
-      </div>
-
-      {/* Adicionar seção de status do FIDC */}
-      {fidcInitialized && (
-        <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
-          <h3 className="text-lg font-semibold text-green-700">FIDC Ativo</h3>
-          <p className="text-sm text-green-600">ID: {fidcId}</p>
-          <p className="text-sm text-green-600">
-            Manager/Validator/Payable:{" "}
-            {useDemoAccount ? DEMO_WALLET_ADDRESS : address}
-          </p>
-        </div>
-      )}
-
-      {!isConnected && !useDemoAccount && (
-        <div
-          className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-6"
-          role="alert"
-        >
-          <p className="font-bold">Wallet not connected</p>
-          <p>
-            Please connect your wallet or use the demo account to interact with
-            this portal
-          </p>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-          <h2 className="text-xl font-semibold mb-4">
-            Validator and Payable Approval
-          </h2>
-
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                Amount (Stablecoin)
-              </label>
-              <input
-                type="text"
-                value={formData.amount}
-                onChange={(e) =>
-                  setFormData({ ...formData, amount: e.target.value })
-                }
-                className="w-full p-2 border rounded"
-                placeholder="1000"
-              />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
+          {/* Step 1: Iniciar/Selecionar FIDC */}
+          <div className="capitare-card">
+            <div className="capitare-icon">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-6 w-6"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 4v16m8-8H4"
+                />
+              </svg>
             </div>
+            <h2 className="capitare-card-title">Iniciar ou Selecionar FIDC</h2>
 
-            <button
-              onClick={handleValidatorApproval}
-              disabled={
-                processing || isProcessing || (!isConnected && !useDemoAccount)
-              }
-              className="w-full px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400"
-            >
-              {processing || isProcessing
-                ? "Processing..."
-                : fidcInitialized
-                ? "Start Approval Process"
-                : "Initialize FIDC and Start Approval"}
-            </button>
+            <div className="space-y-4">
+              <div className="bg-amber-50 border-l-4 border-amber-400 p-3 mb-3">
+                <p className="text-sm text-amber-700">
+                  <span className="font-medium">Nota:</span> Esta operação usa a
+                  wallet selecionada acima.
+                </p>
+              </div>
+
+              <div>
+                <label className="capitare-input-label">
+                  Amount (Stablecoin)
+                </label>
+                <input
+                  type="text"
+                  value={formData.amount}
+                  onChange={(e) =>
+                    setFormData({ ...formData, amount: e.target.value })
+                  }
+                  className="capitare-input"
+                  placeholder="Enter amount, e.g. 1000"
+                />
+              </div>
+
+              <button
+                onClick={handleValidatorApproval}
+                disabled={processing || isProcessing || !isConnected}
+                className="capitare-btn w-full"
+              >
+                {processing || isProcessing
+                  ? "Processing..."
+                  : fidcInitialized
+                  ? "Start Approval Process"
+                  : "Initialize FIDC and Start Approval"}
+              </button>
+
+              {fidcInitialized && (
+                <div className="bg-green-50 border-l-4 border-green-400 p-3 mt-3">
+                  <p className="text-sm text-green-700">
+                    <span className="font-semibold">FIDC Active</span> - ID:{" "}
+                    {fidcId}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Step 2: Consulta de Investidores */}
+          <div className="capitare-card">
+            <div className="capitare-icon">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-6 w-6"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
+              </svg>
+            </div>
+            <h2 className="capitare-card-title">Consulta de Investidores</h2>
+
+            <div className="space-y-4">
+              <div>
+                <label className="capitare-input-label">FIDC ID</label>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    value={queryFidcId}
+                    onChange={(e) => setQueryFidcId(Number(e.target.value))}
+                    className="capitare-input flex-1"
+                    min="1"
+                    placeholder="Digite o ID do FIDC"
+                  />
+                  <button
+                    onClick={() => loadInvestors(queryFidcId)}
+                    disabled={loadingInvestors}
+                    className="capitare-btn"
+                  >
+                    {loadingInvestors ? "Carregando..." : "Consultar"}
+                  </button>
+                </div>
+              </div>
+
+              {loadingInvestors ? (
+                <div className="text-center py-4">
+                  <p className="text-gray-700">
+                    Carregando dados dos investidores...
+                  </p>
+                </div>
+              ) : investorsData && investorsData.investors.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">
+                          Endereço
+                        </th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">
+                          Tipo
+                        </th>
+                        <th className="px-4 py-2 text-right text-xs font-medium text-gray-500">
+                          Valor Investido
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {investorsData.investors.map((investor, index) => (
+                        <tr key={investor} className="hover:bg-gray-50">
+                          <td className="px-4 py-2 text-sm font-mono">
+                            {`${investor.slice(0, 6)}...${investor.slice(-4)}`}
+                          </td>
+                          <td className="px-4 py-2 text-sm">
+                            <span
+                              className={`px-2 py-1 rounded-full text-xs ${
+                                investorsData.isSenior[index]
+                                  ? "bg-blue-100 text-blue-800"
+                                  : "bg-purple-100 text-purple-800"
+                              }`}
+                            >
+                              {investorsData.isSenior[index]
+                                ? "Senior"
+                                : "Subordinado"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2 text-sm text-right font-mono">
+                            {Number(
+                              investorsData.amounts[index]
+                            ).toLocaleString()}{" "}
+                            Stablecoin
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-center py-4">
+                  <p className="text-gray-500">
+                    {investorsData === null
+                      ? "Digite um ID de FIDC e clique em Consultar"
+                      : "Nenhum investidor encontrado para este FIDC"}
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
-        <div className="space-y-6">
-          <div className="bg-black rounded-lg shadow p-4 text-green-400 font-mono">
-            <h2 className="text-xl font-semibold mb-2 text-white">
-              Transaction Logs
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
+          {/* Step 3: Investir no FIDC */}
+          <div className="capitare-card">
+            <div className="capitare-icon">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-6 w-6"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
+              </svg>
+            </div>
+            <h2 className="capitare-card-title">Investir no FIDC</h2>
+
+            <div className="space-y-4">
+              <div className="bg-amber-50 border-l-4 border-amber-400 p-3 mb-3">
+                <p className="text-sm text-amber-700">
+                  <span className="font-medium">Nota:</span> Esta operação usa a
+                  wallet selecionada acima.
+                </p>
+              </div>
+
+              <div>
+                <label className="capitare-input-label">FIDC ID</label>
+                <input
+                  type="number"
+                  value={investmentInputs.investmentFidcId}
+                  onChange={(e) => {
+                    const newFidcId = Number(e.target.value);
+                    setInvestmentInputs({
+                      ...investmentInputs,
+                      investmentFidcId: newFidcId,
+                    });
+                    loadInvestmentFIDCDetails(newFidcId);
+                  }}
+                  className="capitare-input"
+                  min="1"
+                  placeholder="1"
+                />
+              </div>
+
+              <div>
+                <label className="capitare-input-label">
+                  Valor do Investimento (Stablecoin)
+                </label>
+                <input
+                  type="text"
+                  value={investmentInputs.amount}
+                  onChange={(e) =>
+                    setInvestmentInputs({
+                      ...investmentInputs,
+                      amount: e.target.value,
+                    })
+                  }
+                  className="capitare-input"
+                  placeholder="1000"
+                />
+              </div>
+
+              <div>
+                <label className="capitare-input-label">
+                  Tipo de Investimento
+                </label>
+                <div className="flex space-x-4">
+                  <label className="inline-flex items-center">
+                    <input
+                      type="radio"
+                      checked={investmentInputs.isSenior}
+                      onChange={() =>
+                        setInvestmentInputs({
+                          ...investmentInputs,
+                          isSenior: true,
+                        })
+                      }
+                      className="form-radio text-blue-600"
+                    />
+                    <span className="ml-2 text-gray-700">Senior</span>
+                  </label>
+                  <label className="inline-flex items-center">
+                    <input
+                      type="radio"
+                      checked={!investmentInputs.isSenior}
+                      onChange={() =>
+                        setInvestmentInputs({
+                          ...investmentInputs,
+                          isSenior: false,
+                        })
+                      }
+                      className="form-radio text-blue-600"
+                    />
+                    <span className="ml-2 text-gray-700">Subordinado</span>
+                  </label>
+                </div>
+              </div>
+
+              <button
+                onClick={() =>
+                  handleInvestment(investmentInputs.investmentFidcId)
+                }
+                disabled={
+                  processing || isProcessing || !isConnected || !fidcDetails
+                }
+                className="capitare-btn w-full"
+              >
+                {processing || isProcessing
+                  ? "Processando..."
+                  : "Realizar Investimento"}
+              </button>
+            </div>
+          </div>
+
+          {/* Step 4: Antecipação PJ */}
+          <div className="capitare-card">
+            <div className="capitare-icon">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-6 w-6"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"
+                />
+              </svg>
+            </div>
+            <h2 className="capitare-card-title">
+              Antecipação de Recebíveis para PJ
             </h2>
-            <div className="h-[400px] overflow-y-auto">
+
+            <div className="space-y-4">
+              <div className="bg-amber-50 border-l-4 border-amber-400 p-3 mb-3">
+                <p className="text-sm text-amber-700">
+                  <span className="font-medium">Nota:</span> Esta operação usa a
+                  wallet selecionada acima.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="capitare-input-label">
+                    Valor da Antecipação
+                  </label>
+                  <input
+                    type="text"
+                    value={pjFormData.anticipationAmount}
+                    onChange={(e) =>
+                      setPjFormData({
+                        ...pjFormData,
+                        anticipationAmount: e.target.value,
+                      })
+                    }
+                    className="capitare-input"
+                  />
+                </div>
+
+                <div>
+                  <label className="capitare-input-label">FIDC ID</label>
+                  <input
+                    type="number"
+                    value={pjFormData.fidcId}
+                    onChange={(e) =>
+                      setPjFormData({
+                        ...pjFormData,
+                        fidcId: Number(e.target.value),
+                      })
+                    }
+                    className="capitare-input"
+                    min="1"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="capitare-input-label">
+                    Token de Garantia
+                  </label>
+                  <input
+                    type="text"
+                    value={pjFormData.collateralToken}
+                    onChange={(e) =>
+                      setPjFormData({
+                        ...pjFormData,
+                        collateralToken: e.target.value,
+                      })
+                    }
+                    className="capitare-input"
+                  />
+                </div>
+
+                <div>
+                  <label className="capitare-input-label">Endereço da PJ</label>
+                  <input
+                    type="text"
+                    value={pjFormData.pjAddress}
+                    onChange={(e) =>
+                      setPjFormData({
+                        ...pjFormData,
+                        pjAddress: e.target.value,
+                      })
+                    }
+                    className="capitare-input"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="capitare-input-label">
+                  Tokens de Colateral
+                </label>
+                <input
+                  type="text"
+                  value={pjFormData.collateralAmount}
+                  onChange={(e) =>
+                    setPjFormData({
+                      ...pjFormData,
+                      collateralAmount: e.target.value,
+                    })
+                  }
+                  className="capitare-input"
+                />
+              </div>
+
+              <button
+                onClick={handlePjAnticipation}
+                disabled={processing || isProcessing}
+                className="capitare-btn w-full"
+              >
+                {processing || isProcessing
+                  ? "Processando..."
+                  : "Aprovar no Blockchain"}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
+          {/* Step 5: Pagamento do Adquirente */}
+          <div className="capitare-card">
+            <div className="capitare-icon">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-6 w-6"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"
+                />
+              </svg>
+            </div>
+            <h2 className="capitare-card-title">Pagamento do Adquirente</h2>
+
+            <div className="space-y-4">
+              <div className="bg-amber-50 border-l-4 border-amber-400 p-3 mb-3">
+                <p className="text-sm text-amber-700">
+                  <span className="font-medium">Nota:</span> Esta operação usa a
+                  wallet selecionada acima.
+                </p>
+              </div>
+
+              <div>
+                <label className="capitare-input-label">FIDC ID</label>
+                <input
+                  type="number"
+                  value={fidcId}
+                  onChange={(e) => {
+                    const newFidcId = Number(e.target.value);
+                    setFidcId(newFidcId);
+                    loadScheduleAmount(newFidcId);
+                  }}
+                  className="capitare-input"
+                  min="1"
+                  placeholder="Digite o ID do FIDC"
+                />
+              </div>
+
+              <div>
+                <label className="capitare-input-label">
+                  Amount (Stablecoin)
+                </label>
+                <input
+                  type="text"
+                  value={formData.amount}
+                  readOnly
+                  className="capitare-input bg-gray-50"
+                  placeholder="Valor será preenchido automaticamente"
+                />
+              </div>
+
+              <div className="bg-blue-50 border-l-4 border-blue-400 p-4">
+                <div className="flex">
+                  <div className="flex-shrink-0">
+                    <svg
+                      className="h-5 w-5 text-blue-400"
+                      viewBox="0 0 20 20"
+                      fill="currentColor"
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                  </div>
+                  <div className="ml-3">
+                    <p className="text-sm text-blue-700">
+                      O valor será automaticamente definido com base no valor da
+                      emissão do FIDC
+                    </p>
+                    {scheduleAmount && (
+                      <p className="text-sm text-blue-600 mt-1">
+                        Valor da emissão: {scheduleAmount} Stablecoin
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={() => handleCompensationPay(fidcId, formData.amount)}
+                disabled={
+                  processing || isProcessing || !isConnected || !scheduleAmount
+                }
+                className="capitare-btn w-full"
+              >
+                {processing || isProcessing
+                  ? "Processing..."
+                  : "Execute Compensation Pay"}
+              </button>
+            </div>
+          </div>
+
+          {/* Step 6: Redeem All Manager */}
+          <div className="capitare-card">
+            <div className="capitare-icon">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-6 w-6"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
+                />
+              </svg>
+            </div>
+            <h2 className="capitare-card-title">Manager Redeem</h2>
+
+            <div className="space-y-4">
+              <div className="bg-amber-50 border-l-4 border-amber-400 p-3 mb-3">
+                <p className="text-sm text-amber-700">
+                  <span className="font-medium">Nota:</span> Esta operação usa a
+                  wallet selecionada acima.
+                </p>
+              </div>
+
+              <div>
+                <label className="capitare-input-label">FIDC ID</label>
+                <input
+                  type="number"
+                  value={fidcId}
+                  onChange={(e) => setFidcId(Number(e.target.value))}
+                  className="capitare-input"
+                  min="1"
+                  placeholder="FIDC ID"
+                />
+              </div>
+
+              <div>
+                <label className="capitare-input-label">
+                  Add Investor Address
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newRedeemAddress}
+                    onChange={(e) => setNewRedeemAddress(e.target.value)}
+                    placeholder="Endereço do investidor"
+                    className="capitare-input flex-1"
+                  />
+                  <button
+                    onClick={() => {
+                      if (
+                        !newRedeemAddress ||
+                        !ethers.isAddress(newRedeemAddress)
+                      ) {
+                        addLog("Por favor insira um endereço válido");
+                        return;
+                      }
+                      if (managerRedeemAddresses.includes(newRedeemAddress)) {
+                        addLog("Este endereço já foi adicionado");
+                        return;
+                      }
+                      setManagerRedeemAddresses([
+                        ...managerRedeemAddresses,
+                        newRedeemAddress,
+                      ]);
+                      setNewRedeemAddress("");
+                      addLog(
+                        `Endereço ${newRedeemAddress} adicionado à lista de resgate`
+                      );
+                    }}
+                    className="capitare-btn"
+                  >
+                    Adicionar
+                  </button>
+                </div>
+              </div>
+
+              {managerRedeemAddresses.length > 0 && (
+                <div className="mb-4">
+                  <h3 className="text-sm font-medium mb-2 text-gray-700">
+                    Addresses to Redeem
+                  </h3>
+                  <div className="max-h-48 overflow-y-auto border rounded">
+                    <table className="min-w-full">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="py-2 px-4 text-left text-xs font-medium text-gray-500">
+                            Endereço
+                          </th>
+                          <th className="py-2 px-4 text-right text-xs font-medium text-gray-500">
+                            Ação
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {managerRedeemAddresses.map((addr) => (
+                          <tr key={addr} className="hover:bg-gray-50">
+                            <td className="py-2 px-4 text-sm">
+                              {addr.slice(0, 6)}...{addr.slice(-4)}
+                            </td>
+                            <td className="py-2 px-4 text-right">
+                              <button
+                                onClick={() => {
+                                  setManagerRedeemAddresses(
+                                    managerRedeemAddresses.filter(
+                                      (a) => a !== addr
+                                    )
+                                  );
+                                  addLog(
+                                    `Endereço ${addr} removido da lista de resgate`
+                                  );
+                                }}
+                                className="px-3 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600"
+                              >
+                                Remover
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-4">
+                <button
+                  onClick={handleManagerRedeemAll}
+                  disabled={
+                    processing ||
+                    isProcessing ||
+                    !isConnected ||
+                    managerRedeemAddresses.length === 0
+                  }
+                  className="capitare-btn flex-1"
+                >
+                  {processing || isProcessing
+                    ? "Processing..."
+                    : `Redeem All (${managerRedeemAddresses.length})`}
+                </button>
+
+                {managerRedeemAddresses.length > 0 && (
+                  <button
+                    onClick={() => {
+                      setManagerRedeemAddresses([]);
+                      addLog("Lista de endereços para resgate limpa");
+                    }}
+                    className="capitare-btn-outline"
+                  >
+                    Limpar Lista
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Transaction and Logs Card */}
+        <div className="capitare-card">
+          <div className="capitare-icon">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-6 w-6"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z"
+              />
+            </svg>
+          </div>
+          <h2 className="capitare-card-title">Transaction Logs</h2>
+
+          <div className="bg-gray-900 rounded-lg p-4 text-green-400 font-mono">
+            <div className="h-[300px] overflow-y-auto">
               {logs.length === 0 ? (
                 <p className="text-gray-500">
-                  No logs yet. Start the approval process to see transaction
-                  logs.
+                  No logs yet. Start operations to see transaction logs.
                 </p>
               ) : (
                 logs.map((log, i) => (
@@ -1062,619 +1655,48 @@ export default function ManagerPage() {
             </div>
           </div>
 
-          {/* Adicionar o componente de detalhes da transação */}
-          <TransactionDetailsCard />
-        </div>
-      </div>
+          {/* Transaction Details */}
+          {(transactionDetails || pjTransactionDetails) && (
+            <div className="mt-4">
+              <h3 className="text-lg font-medium mb-2">Transaction Details</h3>
 
-      {/* Adicionar seção de investimento no JSX, após a seção de Validator and Payable Approval: */}
-      {fidcInitialized && (
-        <div className="mt-6 bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-          <h2 className="text-xl font-semibold mb-4">
-            Realizar Investimento no FIDC
-          </h2>
-
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">FIDC ID</label>
-              <input
-                type="number"
-                value={investmentInputs.investmentFidcId}
-                onChange={(e) => {
-                  const newFidcId = Number(e.target.value);
-                  setInvestmentInputs({
-                    ...investmentInputs,
-                    investmentFidcId: newFidcId,
-                  });
-                  loadInvestmentFIDCDetails(newFidcId);
-                }}
-                className="w-full p-2 border rounded"
-                min="1"
-                placeholder="1"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                Valor do Investimento (Stablecoin)
-              </label>
-              <input
-                type="text"
-                value={investmentInputs.amount}
-                onChange={(e) =>
-                  setInvestmentInputs({
-                    ...investmentInputs,
-                    amount: e.target.value,
-                  })
-                }
-                className="w-full p-2 border rounded"
-                placeholder="1000"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                Tipo de Investimento
-              </label>
-              <div className="flex space-x-4">
-                <label className="inline-flex items-center">
-                  <input
-                    type="radio"
-                    checked={investmentInputs.isSenior}
-                    onChange={() =>
-                      setInvestmentInputs({
-                        ...investmentInputs,
-                        isSenior: true,
-                      })
-                    }
-                    className="form-radio"
-                  />
-                  <span className="ml-2">Senior</span>
-                </label>
-                <label className="inline-flex items-center">
-                  <input
-                    type="radio"
-                    checked={!investmentInputs.isSenior}
-                    onChange={() =>
-                      setInvestmentInputs({
-                        ...investmentInputs,
-                        isSenior: false,
-                      })
-                    }
-                    className="form-radio"
-                  />
-                  <span className="ml-2">Subordinado</span>
-                </label>
-              </div>
-            </div>
-
-            <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded">
-              <h3 className="text-sm font-medium mb-2">Detalhes do FIDC</h3>
-              <div className="space-y-2 text-sm">
-                {fidcDetails ? (
-                  <>
-                    <div className="flex justify-between">
-                      <span>Status:</span>
-                      <span className="font-medium">
-                        {getStatusString(fidcDetails.status)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Rendimento Base:</span>
-                      <span className="font-medium">
-                        {(fidcDetails.annualYield / 100).toFixed(2)}%
-                      </span>
-                    </div>
-                    {investmentInputs.isSenior && (
-                      <div className="flex justify-between">
-                        <span>Spread Senior:</span>
-                        <span className="font-medium">
-                          {(fidcDetails.seniorSpread / 100).toFixed(2)}%
-                        </span>
-                      </div>
-                    )}
-                    <div className="flex justify-between">
-                      <span>Taxa de Gestão:</span>
-                      <span className="font-medium">
-                        {(fidcDetails.fee / 100).toFixed(2)}%
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Total Investido:</span>
-                      <span className="font-medium">
-                        {fidcDetails.invested} Stablecoin
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Manager:</span>
-                      <span className="font-medium text-xs">
-                        {`${fidcDetails.manager.slice(
-                          0,
-                          6
-                        )}...${fidcDetails.manager.slice(-4)}`}
-                      </span>
-                    </div>
-                  </>
-                ) : (
-                  <div className="text-center py-2 text-gray-500">
-                    Carregando detalhes do FIDC...
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <button
-              onClick={() =>
-                handleInvestment(investmentInputs.investmentFidcId)
-              }
-              disabled={
-                processing ||
-                isProcessing ||
-                (!isConnected && !useDemoAccount) ||
-                !fidcDetails
-              }
-              className="w-full px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-400"
-            >
-              {processing || isProcessing
-                ? "Processando..."
-                : "Realizar Investimento"}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Seção de Consulta de Investidores */}
-      <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-          <h2 className="text-xl font-semibold mb-4">
-            Consulta de Investidores
-          </h2>
-
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">FIDC ID</label>
-              <div className="flex gap-2">
-                <input
-                  type="number"
-                  value={queryFidcId}
-                  onChange={(e) => setQueryFidcId(Number(e.target.value))}
-                  className="flex-1 p-2 border rounded"
-                  min="1"
-                  placeholder="Digite o ID do FIDC"
-                />
-                <button
-                  onClick={() => loadInvestors(queryFidcId)}
-                  disabled={loadingInvestors}
-                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400"
-                >
-                  {loadingInvestors ? "Carregando..." : "Consultar"}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-          <h2 className="text-xl font-semibold mb-4">
-            Investidores do FIDC {queryFidcId}
-          </h2>
-
-          {loadingInvestors ? (
-            <div className="text-center py-4">
-              <p className="text-gray-500">
-                Carregando dados dos investidores...
-              </p>
-            </div>
-          ) : investorsData && investorsData.investors.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="min-w-full">
-                <thead className="bg-gray-50 dark:bg-gray-700">
-                  <tr>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">
-                      Endereço
-                    </th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">
-                      Tipo
-                    </th>
-                    <th className="px-4 py-2 text-right text-xs font-medium text-gray-500">
-                      Valor Investido
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200 dark:divide-gray-600">
-                  {investorsData.investors.map((investor, index) => (
-                    <tr
-                      key={investor}
-                      className="hover:bg-gray-50 dark:hover:bg-gray-700"
+              <div className="space-y-3">
+                {/* Use the most recent transaction details */}
+                {(pjTransactionDetails || transactionDetails)?.events.map(
+                  (event, index) => (
+                    <div
+                      key={index}
+                      className="bg-white rounded-lg p-4 border border-gray-200"
                     >
-                      <td className="px-4 py-2 text-sm font-mono">
-                        {`${investor.slice(0, 6)}...${investor.slice(-4)}`}
-                      </td>
-                      <td className="px-4 py-2 text-sm">
-                        <span
-                          className={`px-2 py-1 rounded-full text-xs ${
-                            investorsData.isSenior[index]
-                              ? "bg-blue-100 text-blue-800"
-                              : "bg-purple-100 text-purple-800"
-                          }`}
-                        >
-                          {investorsData.isSenior[index]
-                            ? "Senior"
-                            : "Subordinado"}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2 text-sm text-right font-mono">
-                        {Number(investorsData.amounts[index]).toLocaleString()}{" "}
-                        Stablecoin
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot className="bg-gray-50 dark:bg-gray-700">
-                  <tr>
-                    <td className="px-4 py-2 text-sm font-medium">Total</td>
-                    <td className="px-4 py-2 text-sm"></td>
-                    <td className="px-4 py-2 text-sm text-right font-medium">
-                      {investorsData.amounts
-                        .reduce((acc, curr) => acc + Number(curr), 0)
-                        .toLocaleString()}{" "}
-                      Stablecoin
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          ) : (
-            <div className="text-center py-4">
-              <p className="text-gray-500">
-                {investorsData === null
-                  ? "Digite um ID de FIDC e clique em Consultar"
-                  : "Nenhum investidor encontrado para este FIDC"}
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Seção de Aprovação de Investidores */}
-      <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-          <h2 className="text-xl font-semibold mb-4">
-            Aprovação de Investidores
-          </h2>
-
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">FIDC ID</label>
-              <input
-                type="number"
-                value={approvalInputs.fidcId}
-                onChange={(e) =>
-                  setApprovalInputs({
-                    ...approvalInputs,
-                    fidcId: Number(e.target.value),
-                  })
-                }
-                className="w-full p-2 border rounded"
-                min="1"
-                placeholder="Digite o ID do FIDC"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                Endereço do Investidor
-              </label>
-              <input
-                type="text"
-                value={approvalInputs.investorAddress}
-                onChange={(e) =>
-                  setApprovalInputs({
-                    ...approvalInputs,
-                    investorAddress: e.target.value,
-                  })
-                }
-                className="w-full p-2 border rounded"
-                placeholder="0x..."
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                Tipo de Investidor
-              </label>
-              <div className="flex space-x-4">
-                <label className="inline-flex items-center">
-                  <input
-                    type="radio"
-                    checked={approvalInputs.isSenior}
-                    onChange={() =>
-                      setApprovalInputs({
-                        ...approvalInputs,
-                        isSenior: true,
-                      })
-                    }
-                    className="form-radio"
-                  />
-                  <span className="ml-2">Senior</span>
-                </label>
-                <label className="inline-flex items-center">
-                  <input
-                    type="radio"
-                    checked={!approvalInputs.isSenior}
-                    onChange={() =>
-                      setApprovalInputs({
-                        ...approvalInputs,
-                        isSenior: false,
-                      })
-                    }
-                    className="form-radio"
-                  />
-                  <span className="ml-2">Subordinado</span>
-                </label>
-              </div>
-            </div>
-
-            <button
-              onClick={handleInvestorApproval}
-              disabled={
-                processing ||
-                isProcessing ||
-                (!isConnected && !useDemoAccount) ||
-                !approvalInputs.investorAddress ||
-                !ethers.isAddress(approvalInputs.investorAddress)
-              }
-              className="w-full px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400"
-            >
-              {processing || isProcessing
-                ? "Processando..."
-                : "Aprovar Investidor"}
-            </button>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-          <h2 className="text-xl font-semibold mb-4">Instruções</h2>
-          <div className="space-y-2 text-sm">
-            <p>• Apenas o manager do FIDC pode aprovar novos investidores</p>
-            <p>
-              • O endereço do investidor deve ser um endereço Ethereum válido
-            </p>
-            <p>• A aprovação é específica para cada FIDC ID</p>
-            <p>• Você pode verificar os investidores na seção de consulta</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Nova seção de Resgate Manager */}
-      <div className="mt-6 bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-        <h2 className="text-xl font-semibold mb-4">
-          Manager Redeem Multiple Addresses
-        </h2>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-          <div>
-            <label className="block text-sm font-medium mb-1">FIDC ID</label>
-            <input
-              type="number"
-              value={fidcId}
-              onChange={(e) => setFidcId(Number(e.target.value))}
-              className="w-full p-2 border rounded"
-              min="1"
-              placeholder="FIDC ID"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-1">
-              Add Investor Address
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={newRedeemAddress}
-                onChange={(e) => setNewRedeemAddress(e.target.value)}
-                placeholder="Endereço do investidor"
-                className="flex-1 p-2 border rounded"
-              />
-              <button
-                onClick={() => {
-                  if (
-                    !newRedeemAddress ||
-                    !ethers.isAddress(newRedeemAddress)
-                  ) {
-                    addLog("Por favor insira um endereço válido");
-                    return;
-                  }
-                  if (managerRedeemAddresses.includes(newRedeemAddress)) {
-                    addLog("Este endereço já foi adicionado");
-                    return;
-                  }
-                  setManagerRedeemAddresses([
-                    ...managerRedeemAddresses,
-                    newRedeemAddress,
-                  ]);
-                  setNewRedeemAddress("");
-                  addLog(
-                    `Endereço ${newRedeemAddress} adicionado à lista de resgate`
-                  );
-                }}
-                className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
-              >
-                Adicionar
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {managerRedeemAddresses.length > 0 && (
-          <div className="mb-4">
-            <h3 className="text-sm font-medium mb-2">Addresses to Redeem</h3>
-            <div className="max-h-48 overflow-y-auto border rounded">
-              <table className="min-w-full">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="py-2 px-4 text-left text-xs font-medium text-gray-500">
-                      Endereço
-                    </th>
-                    <th className="py-2 px-4 text-right text-xs font-medium text-gray-500">
-                      Ação
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {managerRedeemAddresses.map((addr) => (
-                    <tr key={addr} className="hover:bg-gray-50">
-                      <td className="py-2 px-4 text-sm">
-                        {addr.slice(0, 6)}...{addr.slice(-4)}
-                      </td>
-                      <td className="py-2 px-4 text-right">
-                        <button
-                          onClick={() => {
-                            setManagerRedeemAddresses(
-                              managerRedeemAddresses.filter((a) => a !== addr)
-                            );
-                            addLog(
-                              `Endereço ${addr} removido da lista de resgate`
-                            );
-                          }}
-                          className="px-3 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600"
-                        >
-                          Remover
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        <div className="flex items-center gap-4">
-          <button
-            onClick={handleManagerRedeemAll}
-            disabled={
-              processing ||
-              isProcessing ||
-              !isConnected ||
-              managerRedeemAddresses.length === 0
-            }
-            className="flex-1 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:bg-gray-400"
-          >
-            {processing || isProcessing
-              ? "Processing..."
-              : `Redeem All Manager (${managerRedeemAddresses.length} endereços)`}
-          </button>
-
-          {managerRedeemAddresses.length > 0 && (
-            <button
-              onClick={() => {
-                setManagerRedeemAddresses([]);
-                addLog("Lista de endereços para resgate limpa");
-              }}
-              className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
-            >
-              Limpar Lista
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Nova seção de Compensation Pay */}
-      <div className="mt-6 bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-        <h2 className="text-xl font-semibold mb-4">
-          Pagamento do Adiquiriente
-        </h2>
-
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-1">FIDC ID</label>
-            <input
-              type="number"
-              value={fidcId}
-              onChange={(e) => {
-                const newFidcId = Number(e.target.value);
-                setFidcId(newFidcId);
-                loadScheduleAmount(newFidcId); // Carrega o valor automaticamente
-              }}
-              className="w-full p-2 border rounded"
-              min="1"
-              placeholder="Digite o ID do FIDC"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-1">
-              Amount (Stablecoin)
-            </label>
-            <input
-              type="text"
-              value={formData.amount}
-              readOnly // Torna o campo somente leitura
-              className="w-full p-2 border rounded bg-gray-50"
-              placeholder="Valor será preenchido automaticamente"
-            />
-          </div>
-
-          <div className="bg-blue-50 border-l-4 border-blue-400 p-4 mb-4">
-            <div className="flex">
-              <div className="flex-shrink-0">
-                <svg
-                  className="h-5 w-5 text-blue-400"
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-              </div>
-              <div className="ml-3">
-                <p className="text-sm text-blue-700">
-                  O valor será automaticamente definido com base no valor da
-                  emissão do FIDC
-                </p>
-                {scheduleAmount && (
-                  <p className="text-sm text-blue-600 mt-1">
-                    Valor da emissão: {scheduleAmount} Stablecoin
-                  </p>
+                      <div className="text-sm font-medium text-blue-600 mb-2">
+                        {event.description}
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-sm">
+                        <div>
+                          <span className="text-gray-500">From:</span>
+                          <div className="font-mono break-all text-xs">
+                            {event.from}
+                          </div>
+                        </div>
+                        <div>
+                          <span className="text-gray-500">To:</span>
+                          <div className="font-mono break-all text-xs">
+                            {event.to}
+                          </div>
+                        </div>
+                        <div className="col-span-2">
+                          <span className="text-gray-500">Amount:</span>
+                          <div className="font-mono text-green-600">
+                            {event.amount}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )
                 )}
               </div>
             </div>
-          </div>
-
-          <button
-            onClick={() => handleCompensationPay(fidcId, formData.amount)}
-            disabled={
-              processing ||
-              isProcessing ||
-              (!isConnected && !useDemoAccount) ||
-              !scheduleAmount // Desabilita se não tiver o valor carregado
-            }
-            className="w-full px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:bg-gray-400"
-          >
-            {processing || isProcessing
-              ? "Processing..."
-              : "Execute Compensation Pay"}
-          </button>
-
-          <div className="mt-4 text-sm text-gray-600">
-            <h3 className="font-medium mb-2">Instruções:</h3>
-            <ul className="list-disc pl-5 space-y-1">
-              <li>
-                O valor será automaticamente definido com base na emissão do
-                FIDC
-              </li>
-              <li>
-                Será necessário aprovar o uso do token Stablecoin primeiro
-              </li>
-              <li>A transação será executada após a aprovação do token</li>
-              <li>Os eventos da transação serão exibidos após a conclusão</li>
-            </ul>
-          </div>
+          )}
         </div>
       </div>
     </div>

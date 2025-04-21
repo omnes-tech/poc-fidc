@@ -1,20 +1,9 @@
-/* Polygon */
-/* export const FIDC_Management_address = "0x1524d57d674D9202d66EE7Ca024d462AEE31e03F"
-export const ERC20Mock_address = "0x9ECA7A8fb1B1EB59653CA6354E6749040247BC4A"
- */
-
-/* Ethereum Holesky 
-== Logs ==
- 
-
-1. Holesky last changes:
-  Deployed Mock StableCoin at: 0x3D876D9e75477cF89C6ba5EF4b4420b87b8FEB37
-  Deployed FIDC_Management at: 0xC7F10d8F221F77C49b678a2611e3700062859005
-
-2. Holesky last changes:
-  Deployed Mock StableCoin at: 0xF75e903fF7EC94C9be153263Ee46512957b24630
-  Deployed FIDC_Management at: 0xe7aeCC439a651d21b7c26752072A1D14CF5Cc228
-*/
-export const FIDC_Management_address = "0xe7aeCC439a651d21b7c26752072A1D14CF5Cc228"
-export const ERC20Mock_address = "0xF75e903fF7EC94C9be153263Ee46512957b24630"
-
+export const adminAddresses = {
+  manager_address: "0x6B1281e5493a2531Ae306fBf0f34eFa9F38fED29",
+  pj_address: "0x0C7D9bE1495C55cD2080D316F05c90d67a9aB720",
+  adqui_address: "0x48eedd3069Bf8c3895250b19033B489F331DD5aB",
+};
+export const FIDC_Management_address =
+  "0xa28281EBfE00cd841BC29A4E7a966E0C5Dd71d4e";
+export const ERC20Mock_address = "0xF16c5ad3691c81b92216a13eD592eF019978Af08";
+export const collateral_address = "0xf9248FB3449FE8AAd81A2F8e8629C820556a6b7b";

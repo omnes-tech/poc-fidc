@@ -1,23 +1,20 @@
-import type { Metadata } from "next";
-import { Poppins } from "next/font/google";
-import "./globals.css";
-import Providers from "@/components/Providers";
+import Providers from '@/components/Providers';
+import './globals.css';
+import '@rainbow-me/rainbowkit/styles.css';
+import { Inter } from 'next/font/google';
 
-const inter = Poppins({
-  subsets: ["latin-ext"],
-  weight: ["100", "200", "300", "400", "500", "600", "700"],
-});
+const inter = Inter({ subsets: ['latin'] });
 
-export const metadata: Metadata = {
-  title: "FIDC",
-  description: "FIDC",
+export const metadata = {
+  title: 'FIDC Platform',
+  description: 'Blockchain-based FIDC management platform',
 };
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
+}) {
   return (
     <html lang="en">
       <body className={inter.className}>
