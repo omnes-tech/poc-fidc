@@ -7,6 +7,8 @@ import { ethers } from "ethers";
 import Link from "next/link";
 import CapitareHeader from "@/components/CapitareHeader";
 import WalletSelector from "@/components/WalletSelector";
+import { FIDC_Management_address, ERC20Mock_address } from "@/constants";
+import { adminAddresses } from "@/constants";
 
 const DEMO_WALLET_ADDRESS = "0xF64749A9D8e4e4F33c9343e63797D57B80FBefd0";
 
@@ -55,10 +57,6 @@ export default function ManagerPage() {
     isProcessing,
     txHash,
     error,
-    approveEmissionValidator,
-    approveEmissionPayable,
-    approvedValidator,
-    approvePayable,
     fundInvestorWallet,
     initializeFIDC,
     invest,
@@ -68,6 +66,7 @@ export default function ManagerPage() {
     redeemAllManager,
     compensationPay,
     getFIDCScheduleAmount,
+    getContracts,
   } = useContractInteraction();
 
   const [logs, setLogs] = useState<string[]>([]);
@@ -125,16 +124,54 @@ export default function ManagerPage() {
   const [pjTransactionDetails, setPjTransactionDetails] =
     useState<TransactionDetails | null>(null);
 
-  useEffect(() => {
-    if (useDemoAccount) {
-      setAddress(DEMO_WALLET_ADDRESS);
-      setIsConnected(true);
-      addLog("Usando conta de demonstração: " + DEMO_WALLET_ADDRESS);
-    } else {
-      setAddress(walletAddress);
-      setIsConnected(isWalletConnected);
+  // Add these state variables after the other useState declarations
+  const [stablecoinBalance, setStablecoinBalance] = useState<string>("0");
+  const [receivablesBalance, setReceivablesBalance] = useState<string>("0");
+
+  // Add this function to update balances
+  const updateBalances = useCallback(async () => {
+    if (!fidcId) return;
+
+    try {
+      const { fidcContract, drexContract } = await getContracts(useDemoAccount);
+
+      // Get stablecoin balance
+      const stablecoinBal = await drexContract.balanceOf(
+        FIDC_Management_address
+      );
+      setStablecoinBalance(ethers.formatEther(stablecoinBal));
+
+      // Get receivables balance
+      const receivableAddress = await fidcContract.getFIDCReceivable(fidcId);
+      if (receivableAddress) {
+        const receivablesBal = await fidcContract.balanceOf(receivableAddress);
+        setReceivablesBalance(ethers.formatEther(receivablesBal));
+      }
+    } catch (error) {
+      console.error("Error updating balances:", error);
     }
-  }, [walletAddress, isWalletConnected, useDemoAccount]);
+  }, [fidcId, getContracts, useDemoAccount]);
+
+  // Add useEffect to update balances when fidcId changes or after relevant operations
+  useEffect(() => {
+    updateBalances();
+  }, [fidcId, updateBalances]);
+
+  // Add this after the existing useEffect hooks
+  useEffect(() => {
+    const interval = setInterval(updateBalances, 10000); // Update every 10 seconds
+    return () => clearInterval(interval);
+  }, [updateBalances]);
+
+  useEffect(() => {
+    // Se um endereço foi selecionado através do WalletSelector
+    if (address) {
+      setIsConnected(true);
+      addLog(`Usando carteira: ${address}`);
+    } else {
+      setIsConnected(false);
+    }
+  }, [address]);
 
   useEffect(() => {
     if (error) {
@@ -154,16 +191,6 @@ export default function ManagerPage() {
     }
   }, [fidcInitialized, fidcId]);
 
-  useEffect(() => {
-    // If we have an address set, consider us connected
-    if (address) {
-      setIsConnected(true);
-      addLog(`Connected with wallet: ${address}`);
-    } else {
-      setIsConnected(false);
-    }
-  }, [address]);
-
   const addLog = (message: string) => {
     setLogs((prev) => [
       ...prev,
@@ -177,10 +204,10 @@ export default function ManagerPage() {
     addLog(`Selected wallet: ${walletAddress}`);
   };
 
-  // Função para fazer os approves e inicializar o FIDC
+  // Modificar o setupAndInitializeFIDC para remover as aprovações e ir direto para a inicialização
   const setupAndInitializeFIDC = async () => {
-    if (!isConnected && !useDemoAccount) {
-      addLog("Por favor conecte sua carteira primeiro");
+    if (!address) {
+      addLog("Por favor selecione uma carteira primeiro");
       return;
     }
 
@@ -188,42 +215,10 @@ export default function ManagerPage() {
     addLog("Iniciando setup do FIDC...");
 
     try {
-      // Determinar qual endereço usar baseado na seleção de conta
-      const currentAddress = useDemoAccount
-        ? DEMO_WALLET_ADDRESS
-        : walletAddress;
-
-      if (!currentAddress) {
-        throw new Error("Endereço não disponível");
-      }
-
+      const currentAddress = address;
       addLog(`Usando endereço: ${currentAddress}`);
 
-      // 1. Primeiro aprovar o validator
-      addLog(`Aprovando ${currentAddress} como validator...`);
-      const validatorResult = await approvedValidator(
-        currentAddress,
-        useDemoAccount
-      );
-
-      if (!validatorResult.success) {
-        throw new Error("Falha ao aprovar validator");
-      }
-      addLog("Validator aprovado com sucesso!");
-
-      // 2. Aprovar o payable
-      addLog(`Aprovando ${currentAddress} como payable...`);
-      const payableResult = await approvePayable(
-        currentAddress,
-        useDemoAccount
-      );
-
-      if (!payableResult.success) {
-        throw new Error("Falha ao aprovar payable");
-      }
-      addLog("Payable aprovado com sucesso!");
-
-      // 3. Inicializar o FIDC
+      // Inicializar o FIDC diretamente
       const fidcConfig = {
         fee: 100, // 1%
         annualYield: 1800, // 18%
@@ -231,7 +226,7 @@ export default function ManagerPage() {
         seniorSpread: 500, // 5%
       };
 
-      addLog("Inicializando FIDC com os endereços aprovados...");
+      addLog("Inicializando FIDC...");
       addLog(`Manager: ${currentAddress}`);
       addLog(`Validator: ${currentAddress}`);
       addLog(`Payable: ${currentAddress}`);
@@ -244,7 +239,7 @@ export default function ManagerPage() {
         fidcConfig.annualYield,
         fidcConfig.gracePeriod,
         fidcConfig.seniorSpread,
-        useDemoAccount
+        true // true para usar demo wallet
       );
 
       if (result.success && result.fidcId) {
@@ -274,10 +269,10 @@ export default function ManagerPage() {
     }
   };
 
-  // Modificar o handleValidatorApproval para usar o novo fluxo
+  // Modificar o handleValidatorApproval para apenas inicializar o FIDC
   const handleValidatorApproval = async () => {
-    if (!isConnected && !useDemoAccount) {
-      addLog("Por favor conecte sua carteira primeiro");
+    if (!address) {
+      addLog("Por favor selecione uma carteira primeiro");
       return;
     }
 
@@ -288,57 +283,15 @@ export default function ManagerPage() {
 
     setProcessing(true);
     try {
-      // Se o FIDC ainda não foi inicializado, fazer todo o setup
-      let currentFidcId = fidcId;
-      let validatorAddress;
-      let payableAddress;
-
-      if (!currentFidcId) {
-        const setup = await setupAndInitializeFIDC();
-        if (!setup) {
-          throw new Error("Falha no setup do FIDC");
-        }
-        currentFidcId = setup.fidcId;
-        validatorAddress = setup.validatorAddress;
-        payableAddress = setup.payableAddress;
+      const setup = await setupAndInitializeFIDC();
+      if (!setup) {
+        throw new Error("Falha no setup do FIDC");
       }
 
-      // Usar o endereço correto baseado na seleção de conta
-      const validatorAddr = useDemoAccount
-        ? DEMO_WALLET_ADDRESS
-        : walletAddress;
-
-      if (!validatorAddr) {
-        throw new Error("Endereço do validator não disponível");
-      }
-
-      // Financiar a carteira do validator para as aprovações
-      addLog(
-        `Financiando carteira do validator ${validatorAddr} com tokens Stablecoin...`
-      );
-      await fundInvestorWallet(validatorAddr, formData.amount, useDemoAccount);
-      addLog("Carteira do validator financiada com sucesso!");
-
-      // Prosseguir com approveEmissionValidator usando o endereço do validator
-      addLog(
-        `Validator (${validatorAddr}) aprovando emissão do FIDC ID: ${currentFidcId}`
-      );
-      const result = await approveEmissionValidator(
-        validatorAddr,
-        currentFidcId,
-        formData.amount,
-        formData.amount,
-        true,
-        useDemoAccount
-      );
-
-      if (result.success) {
-        addLog("Aprovação da emissão pelo validator concluída com sucesso!");
-        // Passar o fidcId correto para o handlePayableApproval
-        handlePayableApproval(currentFidcId, payableAddress!);
-      } else {
-        throw new Error("Falha na aprovação da emissão pelo validator");
-      }
+      // Financiar a carteira com tokens
+      addLog(`Financiando carteira ${address} com tokens Stablecoin...`);
+      await fundInvestorWallet(address, formData.amount, true);
+      addLog("Carteira financiada com sucesso!");
     } catch (error) {
       addLog(
         `Erro durante o processo: ${
@@ -350,136 +303,9 @@ export default function ManagerPage() {
     }
   };
 
-  const handlePayableApproval = async (
-    currentFidcId: number,
-    payableAddress: string
-  ) => {
-    if (!isConnected && !useDemoAccount) {
-      addLog("Por favor conecte sua carteira primeiro");
-      return;
-    }
-
-    setProcessing(true);
-    addLog("Iniciando processo de aprovação do payable...");
-
-    try {
-      // Usar o endereço do payable definido no initializeFIDC
-      const payableAddr = useDemoAccount ? DEMO_WALLET_ADDRESS : address;
-
-      // Financiar a carteira do payable com tokens
-      addLog(`Financiando carteira do payable (${payableAddr}) com tokens...`);
-      await fundInvestorWallet(payableAddr!, formData.amount, useDemoAccount);
-      addLog("Carteira do payable financiada com sucesso!");
-
-      // Proceder com a aprovação da emissão usando o endereço do payable
-      addLog(
-        `Payable (${payableAddr}) aprovando emissão do FIDC ID: ${currentFidcId}`
-      );
-      addLog(`Amount: ${formData.amount} Stablecoin`);
-
-      const result = await approveEmissionPayable(
-        currentFidcId,
-        formData.amount,
-        true,
-        useDemoAccount
-      );
-
-      if (result.success) {
-        addLog("Aprovação da emissão pelo payable concluída com sucesso!");
-
-        // Capturar os eventos de transfer da transação
-        if (result.receipt) {
-          const events = result.receipt.logs
-            .filter(
-              (log: any) =>
-                log.topics[0] === ethers.id("Transfer(address,address,uint256)")
-            )
-            .map((log: any, index: number) => {
-              return {
-                type: "Transfer",
-                from: `0x${log.topics[1].slice(-40)}`,
-                to: `0x${log.topics[2].slice(-40)}`,
-                amount: ethers.formatEther(log.data),
-                description:
-                  index === 0
-                    ? "Transferência de pagamento do adiquiriente"
-                    : "Queima dos recebiveis apos pagamento do adiquirente",
-              };
-            });
-
-          setTransactionDetails({
-            hash: result.receipt.hash,
-            events: events,
-          });
-        }
-
-        // Agora que o FIDC está ativo, podemos aprovar os investidores
-        const currentAddress = useDemoAccount ? DEMO_WALLET_ADDRESS : address;
-
-        try {
-          // 1. Aprovar como investidor Senior
-          addLog(
-            `Aprovando ${currentAddress} como investidor Senior para FIDC ${currentFidcId}...`
-          );
-          const seniorApprovalResult = await approveInvestor(
-            currentAddress!,
-            0, // 0 = Senior
-            currentFidcId,
-            useDemoAccount
-          );
-
-          if (!seniorApprovalResult.success) {
-            throw new Error("Falha ao aprovar investidor Senior");
-          }
-          addLog("Aprovação como investidor Senior concluída com sucesso!");
-
-          // 2. Aprovar como investidor Subordinado
-          addLog(
-            `Aprovando ${currentAddress} como investidor Subordinado para FIDC ${currentFidcId}...`
-          );
-          const subordinatedApprovalResult = await approveInvestor(
-            currentAddress!,
-            1, // 1 = Subordinado
-            currentFidcId,
-            useDemoAccount
-          );
-
-          if (!subordinatedApprovalResult.success) {
-            throw new Error("Falha ao aprovar investidor Subordinado");
-          }
-          addLog(
-            "Aprovação como investidor Subordinado concluída com sucesso!"
-          );
-
-          addLog(
-            `Endereço ${currentAddress} aprovado como investidor Senior e Subordinado para FIDC ${currentFidcId}`
-          );
-        } catch (error) {
-          addLog(
-            `Erro durante aprovação dos investidores: ${
-              error instanceof Error ? error.message : String(error)
-            }`
-          );
-        }
-      } else {
-        addLog(
-          "Falha na aprovação da emissão pelo payable. Verifique o console para detalhes."
-        );
-      }
-    } catch (error) {
-      addLog(
-        `Erro durante aprovação do payable: ${
-          error instanceof Error ? error.message : String(error)
-        }`
-      );
-    } finally {
-      setProcessing(false);
-    }
-  };
-
   // Modificar a função handleInvestment para receber o FIDC ID
   const handleInvestment = async (investmentFidcId: number) => {
-    if (!isConnected) {
+    if (!address) {
       addLog("Por favor selecione uma carteira primeiro");
       return;
     }
@@ -489,62 +315,65 @@ export default function ManagerPage() {
       return;
     }
 
-    if (!fidcDetails) {
-      addLog("Detalhes do FIDC não disponíveis");
-      return;
-    }
-
     setProcessing(true);
     const currentAddress = address;
 
     try {
-      // Primeiro, aprovar o tipo de investidor (senior ou subordinado)
+      addLog(`Iniciando processo de investimento...`);
+      addLog(`FIDC ID: ${investmentFidcId}`);
+      addLog(`Valor: ${investmentInputs.amount} Stablecoin`);
+      addLog(`Tipo: ${investmentInputs.isSenior ? "Senior" : "Subordinado"}`);
+
+      // Primeiro, aprovar o tipo de investidor
       const investorType = investmentInputs.isSenior ? 0 : 1;
       addLog(
-        `Aprovando endereço como investidor ${
-          investmentInputs.isSenior ? "Senior" : "Subordinado"
-        } para o FIDC ${investmentFidcId}...`
+        `Aprovando endereço ${currentAddress} como investidor tipo ${investorType}...`
       );
 
       const approvalResult = await approveInvestor(
-        currentAddress!,
+        currentAddress,
         investorType,
         investmentFidcId,
-        false // Don't use demo wallet
+        true
       );
 
       if (!approvalResult.success) {
         throw new Error("Falha ao aprovar tipo de investidor");
       }
-      addLog("Aprovação de tipo de investidor concluída com sucesso!");
+      addLog("✓ Aprovação de tipo de investidor concluída");
 
-      // Financiar a carteira com tokens para o investimento
-      addLog("Financiando carteira com Stablecoin para o investimento...");
-      await fundInvestorWallet(
-        currentAddress!,
-        (Number(investmentInputs.amount) * 1.1).toString(),
-        false // Don't use demo wallet
+      // Financiar a carteira
+      const fundAmount = (Number(investmentInputs.amount) * 1.1).toString();
+      addLog(`Financiando carteira com ${fundAmount} Stablecoin...`);
+
+      const fundResult = await fundInvestorWallet(
+        currentAddress,
+        fundAmount,
+        true
       );
-      addLog("Carteira financiada com sucesso!");
+
+      if (!fundResult.success) {
+        throw new Error("Falha ao financiar carteira");
+      }
+      addLog("✓ Carteira financiada com sucesso");
 
       // Realizar o investimento
-      addLog(
-        `Iniciando investimento de ${investmentInputs.amount} Stablecoin no FIDC ${investmentFidcId}...`
-      );
+      addLog(`Executando investimento...`);
       const investResult = await invest(
         investmentFidcId,
         investmentInputs.amount,
-        false // Don't use demo wallet
+        true // true para usar demo wallet
       );
 
       if (investResult.success) {
-        addLog(`Investimento realizado com sucesso!`);
-        // Atualizar detalhes do FIDC após o investimento
+        addLog("✓ Investimento realizado com sucesso!");
+        await updateBalances();
         await loadInvestmentFIDCDetails(investmentFidcId);
       } else {
         throw new Error("Falha ao realizar investimento");
       }
     } catch (error) {
+      console.error("Erro no investimento:", error);
       addLog(
         `Erro durante o processo de investimento: ${
           error instanceof Error ? error.message : String(error)
@@ -559,7 +388,7 @@ export default function ManagerPage() {
   const loadInvestmentFIDCDetails = async (newFidcId: number) => {
     try {
       addLog(`Carregando detalhes do FIDC ${newFidcId} para investimento...`);
-      const details = await getFIDCDetails(newFidcId, useDemoAccount, address);
+      const details = await getFIDCDetails(newFidcId, true, address);
 
       if (!details) {
         throw new Error("Não foi possível obter os detalhes do FIDC");
@@ -580,14 +409,14 @@ export default function ManagerPage() {
 
   // Adicionar a função loadFIDCDetails
   const loadFIDCDetails = async () => {
-    if (!isConnected && !useDemoAccount) {
+    if (!address) {
       addLog("Conta não conectada. Não é possível carregar detalhes do FIDC.");
       return;
     }
 
     try {
       addLog(`Carregando detalhes do FIDC ${fidcId}...`);
-      const details = await getFIDCDetails(fidcId, useDemoAccount, address);
+      const details = await getFIDCDetails(fidcId, true, address);
 
       if (!details) {
         throw new Error("Não foi possível obter os detalhes do FIDC");
@@ -611,7 +440,7 @@ export default function ManagerPage() {
     setLoadingInvestors(true);
     try {
       addLog(`Consultando investidores do FIDC ${fidcId}...`);
-      const data = await getAllInvestors(fidcId, useDemoAccount, address);
+      const data = await getAllInvestors(fidcId, true); // true para usar demo wallet
 
       setInvestorsData({
         investors: data.investors,
@@ -640,7 +469,7 @@ export default function ManagerPage() {
 
   // Adicionar junto com as outras funções de manipulação
   const handleManagerRedeemAll = async () => {
-    if (!isConnected) {
+    if (!address) {
       addLog("Por favor selecione uma carteira primeiro");
       return;
     }
@@ -657,7 +486,7 @@ export default function ManagerPage() {
 
     try {
       // Verificar se é o manager usando a carteira selecionada
-      const details = await getFIDCDetails(fidcId, false); // Don't use demo wallet
+      const details = await getFIDCDetails(fidcId, true); // true para usar demo wallet
       const currentAddress = address;
 
       if (details?.manager.toLowerCase() !== currentAddress?.toLowerCase()) {
@@ -670,12 +499,13 @@ export default function ManagerPage() {
       const result = await redeemAllManager(
         fidcId,
         managerRedeemAddresses,
-        false // Don't use demo wallet
+        true // true para usar demo wallet
       );
 
       if (result.success) {
         addLog(`Resgate manager concluído com sucesso!`);
         setManagerRedeemAddresses([]); // Limpa a lista após sucesso
+        await updateBalances();
       } else {
         addLog("Falha no resgate manager. Veja o console para detalhes.");
       }
@@ -694,11 +524,7 @@ export default function ManagerPage() {
   // Adicionar função para carregar o schedule amount quando o FIDC ID mudar
   const loadScheduleAmount = async (fidcId: number) => {
     try {
-      const amount = await getFIDCScheduleAmount(
-        fidcId,
-        useDemoAccount,
-        address
-      );
+      const amount = await getFIDCScheduleAmount(fidcId, true, address);
       setScheduleAmount(amount);
       setFormData((prev) => ({ ...prev, amount })); // Atualiza automaticamente o input
       addLog(`Valor da emissão do FIDC ${fidcId}: ${amount} Stablecoin`);
@@ -713,72 +539,45 @@ export default function ManagerPage() {
 
   // Adicionar junto com as outras funções de manipulação no ManagerPage
   const handleCompensationPay = async (fidcId: number, amount: string) => {
-    if (!isConnected) {
+    if (!address) {
       addLog("Por favor selecione uma carteira primeiro");
       return;
     }
 
-    setProcessing(true);
+    if (!amount || isNaN(Number(amount))) {
+      addLog("Por favor insira um valor válido");
+      return;
+    }
+
     try {
-      // Primeiro, vamos verificar se o valor corresponde ao fidcScheduleAmount
-      const scheduleAmount = await getFIDCScheduleAmount(
-        fidcId,
-        false // Don't use demo wallet
-      );
-
-      if (amount !== scheduleAmount) {
-        addLog(
-          `Erro: O valor deve ser exatamente ${scheduleAmount} Stablecoin`
-        );
-        return;
-      }
-
-      // Financiar a carteira com tokens para o pagamento
-      addLog("Financiando carteira com Stablecoin para o pagamento...");
-      const currentAddress = address;
-      await fundInvestorWallet(currentAddress!, amount, false); // Don't use demo wallet
-      addLog("Carteira financiada com sucesso!");
-
-      // Executar o compensationPay
-      addLog(
-        `Iniciando compensationPay de ${amount} Stablecoin para FIDC ${fidcId}...`
-      );
-      const result = await compensationPay(fidcId, amount, false); // Don't use demo wallet
-
-      if (result.success) {
-        addLog("Pagamento do adiquiriente realizado com sucesso!");
-
-        // Se houver receipt com eventos, podemos processá-los
-        if (result.receipt) {
-          const events = result.receipt.logs
-            .filter(
-              (log: any) =>
-                log.topics[0] === ethers.id("Transfer(address,address,uint256)")
-            )
-            .map((log: any, index: number) => {
-              return {
+      setProcessing(true);
+      // Sempre usar true para useDemoWallet já que estamos usando endereços predefinidos
+      const res = await compensationPay(fidcId, amount, true);
+      if (res.success) {
+        addLog("Pagamento de compensação realizado com sucesso!");
+        if (res.receipt) {
+          setTransactionDetails({
+            hash: res.receipt.hash,
+            events: res.receipt.logs
+              .filter(
+                (log: any) =>
+                  log.topics[0] ===
+                  ethers.id("Transfer(address,address,uint256)")
+              )
+              .map((log: any) => ({
                 type: "Transfer",
                 from: `0x${log.topics[1].slice(-40)}`,
                 to: `0x${log.topics[2].slice(-40)}`,
                 amount: ethers.formatEther(log.data),
-                description:
-                  index === 0
-                    ? "Transferência de pagamento do adiquiriente"
-                    : "Queima dos recebiveis apos pagamento do adiquirente",
-              };
-            });
-
-          setTransactionDetails({
-            hash: result.receipt.hash,
-            events: events,
+                description: "Pagamento de compensação",
+              })),
           });
         }
-      } else {
-        throw new Error("Falha no pagamento do adiquiriente");
+        await updateBalances();
       }
     } catch (error) {
       addLog(
-        `Erro durante o pagamento do adiquiriente: ${
+        `Erro durante o pagamento: ${
           error instanceof Error ? error.message : String(error)
         }`
       );
@@ -789,125 +588,40 @@ export default function ManagerPage() {
 
   // Adicionar nova função para lidar com a antecipação de recebíveis para PJ
   const handlePjAnticipation = async () => {
-    if (!isConnected) {
-      addLog("Por favor selecione uma carteira primeiro");
+    if (!address) {
+      addLog("Conecte a carteira");
       return;
     }
 
-    setProcessing(true);
     try {
-      // Always use the selected wallet - no fallback to demo
-      const currentAddress = address;
-      const fidcIdValue = pjFormData.fidcId;
-      const anticipationAmount = pjFormData.anticipationAmount.replace(
-        " mil",
-        "000"
+      setProcessing(true);
+      const { fidcId, anticipationAmount, collateralAmount } = pjFormData;
+
+      const res = await anticipation(
+        fidcId,
+        anticipationAmount.replace(" mil", "000"),
+        collateralAmount.replace(" mil tokens", "000"),
+        true // NÃO usar demo
       );
-      const collateralAmount = pjFormData.collateralAmount.replace(
-        " mil tokens",
-        "000"
-      );
-      const pjAddress = pjFormData.pjAddress.replace("address: ", "");
 
-      addLog(`Iniciando antecipação de recebíveis para PJ...`);
-      addLog(`FIDC ID: ${fidcIdValue}`);
-      addLog(`Endereço da PJ: ${pjAddress}`);
-      addLog(`Valor da antecipação: ${anticipationAmount} Stablecoin`);
-      addLog(`Valor da garantia: ${collateralAmount} tokens`);
-
-      // 1. Verificar se o FIDC existe e está ativo
-      addLog(`Verificando status do FIDC ${fidcIdValue}...`);
-      const fidcDetails = await getFIDCDetails(fidcIdValue, false); // Don't use demo wallet
-
-      if (!fidcDetails || fidcDetails.status !== 1) {
-        throw new Error(`FIDC ${fidcIdValue} não existe ou não está ativo`);
+      if (res.success) {
+        addLog(`Antecipação concluída – evento: ${JSON.stringify(res.event)}`);
+        setPjTransactionDetails({
+          hash: res.receipt.hash,
+          events: [
+            {
+              type: "Anticipation",
+              from: res.event[1],
+              to: adminAddresses.manager_address,
+              amount: ethers.formatEther(res.event[2]),
+              description: "Valor antecipado à PJ",
+            },
+          ],
+        });
+        updateBalances();
       }
-
-      addLog(`FIDC ${fidcIdValue} está ativo e pronto para processamento`);
-
-      // 2. Financiar o contrato do FIDC com tokens para a antecipação
-      addLog(
-        `Financiando contrato do FIDC com ${anticipationAmount} Stablecoin...`
-      );
-      await fundInvestorWallet(
-        fidcDetails.payableAddress,
-        anticipationAmount,
-        false // Don't use demo wallet
-      );
-      addLog("Contrato do FIDC financiado com sucesso!");
-
-      // 3. Transferir tokens para a PJ (simulação da antecipação)
-      addLog(
-        `Transferindo ${anticipationAmount} Stablecoin para a PJ (${pjAddress})...`
-      );
-      await fundInvestorWallet(
-        pjAddress,
-        anticipationAmount,
-        false // Don't use demo wallet
-      );
-      addLog("Tokens transferidos para a PJ com sucesso!");
-
-      // 4. Simular a criação de recebíveis relacionados à garantia
-      addLog("Criando recebíveis relacionados à garantia...");
-      // Código apenas para simulação - em um ambiente real, isso seria uma chamada
-      // para um contrato inteligente que registraria os recebíveis
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      addLog("Recebíveis criados com sucesso!");
-
-      // 5. Simular a transferência do spread para os investidores
-      const spreadAmount = "20000"; // 20 mil de spread
-      addLog(
-        `Transferindo ${spreadAmount} Stablecoin como spread para os investidores...`
-      );
-      // Em um ambiente real, esse valor seria distribuído para os investidores
-      // com base em suas participações no FIDC
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      addLog("Spread transferido com sucesso!");
-
-      // Gerar um hash de transação fictício para simulação
-      // Em um ambiente real, isso seria o hash real da transação
-      const txHash =
-        "0x" +
-        Array.from({ length: 64 }, () =>
-          Math.floor(Math.random() * 16).toString(16)
-        ).join("");
-
-      // Atualizar o estado pjTransactionDetails com os detalhes da transação
-      setPjTransactionDetails({
-        hash: txHash,
-        events: [
-          {
-            type: "Transfer",
-            from: fidcDetails.payableAddress,
-            to: pjAddress,
-            amount: anticipationAmount.replace("000", " mil"),
-            description: "Transferência do fundo para solicitante PJ",
-          },
-          {
-            type: "Receivable",
-            from: pjAddress,
-            to: fidcDetails.payableAddress,
-            amount: collateralAmount.replace("000", " mil"),
-            description: "Recebível criado relacionado à garantia definida",
-          },
-          {
-            type: "Spread",
-            from: fidcDetails.payableAddress,
-            to: fidcDetails.manager,
-            amount: "20 mil",
-            description: "Valor de spread destinado aos investidores",
-          },
-        ],
-      });
-
-      addLog("Antecipação de recebíveis concluída com sucesso!");
-      addLog(`Hash da transação: ${txHash}`);
-    } catch (error) {
-      addLog(
-        `Erro durante a aprovação de antecipação de recebíveis para PJ: ${
-          error instanceof Error ? error.message : String(error)
-        }`
-      );
+    } catch (e: any) {
+      addLog(`Erro: ${e.message}`);
     } finally {
       setProcessing(false);
     }
@@ -934,6 +648,57 @@ export default function ManagerPage() {
             onSelectWallet={handleSelectWallet}
             selectedWallet={address}
           />
+        </div>
+
+        {/* Balance Bar */}
+        <div className="mb-8">
+          <div className="capitare-card">
+            <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-gray-700 mb-2">
+                  Available Balances - FIDC ID: {fidcId || "N/A"}
+                </h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-blue-50 p-4 rounded-lg">
+                    <div className="text-sm text-blue-600 font-medium mb-1">
+                      Stablecoin
+                    </div>
+                    <div className="text-2xl font-bold text-blue-800">
+                      {Number(stablecoinBalance).toLocaleString()} Stablecoin
+                    </div>
+                  </div>
+                  <div className="bg-purple-50 p-4 rounded-lg">
+                    <div className="text-sm text-purple-600 font-medium mb-1">
+                      Receivables
+                    </div>
+                    <div className="text-2xl font-bold text-purple-800">
+                      {Number(receivablesBalance).toLocaleString()} REC
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={updateBalances}
+                className="capitare-btn-outline px-4 py-2 flex items-center gap-2"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-5 w-5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                  />
+                </svg>
+                Refresh Balances
+              </button>
+            </div>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
@@ -982,7 +747,7 @@ export default function ManagerPage() {
 
               <button
                 onClick={handleValidatorApproval}
-                disabled={processing || isProcessing || !isConnected}
+                disabled={processing || isProcessing || !address}
                 className="capitare-btn w-full"
               >
                 {processing || isProcessing
@@ -1217,7 +982,7 @@ export default function ManagerPage() {
                   handleInvestment(investmentInputs.investmentFidcId)
                 }
                 disabled={
-                  processing || isProcessing || !isConnected || !fidcDetails
+                  processing || isProcessing || !address || !fidcDetails
                 }
                 className="capitare-btn w-full"
               >
@@ -1447,7 +1212,7 @@ export default function ManagerPage() {
               <button
                 onClick={() => handleCompensationPay(fidcId, formData.amount)}
                 disabled={
-                  processing || isProcessing || !isConnected || !scheduleAmount
+                  processing || isProcessing || !address || !scheduleAmount
                 }
                 className="capitare-btn w-full"
               >
@@ -1593,7 +1358,7 @@ export default function ManagerPage() {
                   disabled={
                     processing ||
                     isProcessing ||
-                    !isConnected ||
+                    !address ||
                     managerRedeemAddresses.length === 0
                   }
                   className="capitare-btn flex-1"
