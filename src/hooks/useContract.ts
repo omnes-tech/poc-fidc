@@ -47,22 +47,49 @@ export function useContract() {
     if (!fidcId) return;
 
     try {
+      const provider = await getProvider();
       const { fidcContract, drexContract } = await getContracts();
+
+      // Atualiza saldo de stablecoin
       const stablecoinBal = await drexContract.balanceOf(
         FIDC_Management_address
       );
       setStablecoinBalance(ethers.formatEther(stablecoinBal));
       addLog(`Stablecoin balance: ${ethers.formatEther(stablecoinBal)}`);
+
+      // Obtém endereço do receivable do FIDC
       const receivableAddress = await fidcContract.getFIDCReceivable(fidcId);
-      if (receivableAddress) {
-        const receivablesBal = await fidcContract.balanceOf(receivableAddress);
-        setReceivablesBalance(ethers.formatEther(receivablesBal));
-        addLog(`Receivables balance: ${ethers.formatEther(receivablesBal)}`);
+      addLog(`Receivable address for FIDC ${fidcId}: ${receivableAddress}`);
+
+      if (receivableAddress && receivableAddress !== ethers.ZeroAddress) {
+        // Conecta ao contrato de receivables usando o provider obtido
+        const receivableContract = Erc20__factory.connect(
+          receivableAddress,
+          provider
+        );
+
+        try {
+          // Obtém o saldo de receivables do contrato FIDC
+          const receivablesBal = await receivableContract.balanceOf(
+            FIDC_Management_address
+          );
+          setReceivablesBalance(ethers.formatEther(receivablesBal));
+          addLog(
+            `Receivables balance of FIDC: ${ethers.formatEther(receivablesBal)}`
+          );
+        } catch (error) {
+          console.error("Error getting receivables balance:", error);
+          addLog(`Error getting receivables balance: ${error}`);
+        }
+      } else {
+        setReceivablesBalance("0");
+        addLog("No receivable address found for this FIDC");
       }
     } catch (error) {
       console.error("Error updating balances:", error);
+      addLog(`Error updating balances: ${error}`);
     }
-  }, [fidcId, getContracts]);
+  }, [fidcId, getContracts, addLog]);
 
   async function getProvider() {
     const rpc =
@@ -193,6 +220,16 @@ export function useContract() {
         demoWallet
       );
 
+      // Verificar saldo de quotas antes do investimento
+      const quotasBeforeInvestment = await fidcContract.balanceOf(
+        demoWallet.address
+      );
+      addLog(
+        `Quotas before investment: ${ethers.formatEther(
+          quotasBeforeInvestment
+        )}`
+      );
+
       addLog("Sending approve transaction...");
       const approveTx = await erc20Contract.approve(
         FIDC_Management_address,
@@ -226,6 +263,16 @@ export function useContract() {
       const investReceipt = await investTx.wait();
       addLog("Investment transaction confirmed!");
 
+      // Verificar saldo de quotas após o investimento
+      const quotasAfterInvestment = await fidcContract.balanceOf(
+        demoWallet.address
+      );
+      const quotasMinted = quotasAfterInvestment - quotasBeforeInvestment;
+      addLog(
+        `Quotas after investment: ${ethers.formatEther(quotasAfterInvestment)}`
+      );
+      addLog(`Total quotas minted: ${ethers.formatEther(quotasMinted)}`);
+
       const investEvents = await parseEvents(investReceipt, fidcContract);
       investEvents.forEach((event) => {
         addLog(`Investment event: ${event.name}`);
@@ -246,6 +293,7 @@ export function useContract() {
         approveEvents,
         investReceipt,
         investEvents,
+        quotasMinted: ethers.formatEther(quotasMinted),
       };
     } catch (err: any) {
       setError(err.message || "Error investing in FIDC");
@@ -260,51 +308,89 @@ export function useContract() {
     try {
       setIsProcessing(true);
       setError(null);
-      const newAmount = ethers.parseEther(amount.toString());
+      const requestedAmount = ethers.parseEther(amount.toString());
+      // Calcula o colateral necessário (120% do amount solicitado)
+      const requiredCollateral = (requestedAmount * 120n) / 100n;
+
       addLog(
-        `Processing anticipation of ${newAmount} tokens for FIDC ID: ${anticipationFidcId}...`
+        `Iniciando antecipação...
+        Amount solicitado: ${ethers.formatEther(requestedAmount)} Stablecoin
+        Colateral necessário: ${ethers.formatEther(
+          requiredCollateral
+        )} Collateral`
       );
 
+      // Usar a carteira PJ correta
       const pjWallet = await getWallet("pj");
-      addLog(`Using pj wallet: ${pjWallet.address}`);
+      addLog(`Usando carteira PJ: ${pjWallet.address}`);
 
+      // Verificar se é o endereço PJ correto
+      if (
+        pjWallet.address.toLowerCase() !==
+        adminAddresses.pj_address.toLowerCase()
+      ) {
+        throw new Error("Endereço incorreto para operação de PJ");
+      }
+
+      // Verificar e fornecer colateral se necessário
       const collateralContract = Collateral__factory.connect(
         collateral_address,
         pjWallet
       );
 
+      const currentCollateral = await collateralContract.balanceOf(
+        pjWallet.address
+      );
+      addLog(`Colateral atual da PJ: ${ethers.formatEther(currentCollateral)}`);
+
+      if (currentCollateral < requiredCollateral) {
+        addLog(
+          "Colateral insuficiente. Realizando mint do colateral necessário..."
+        );
+        const mintTx = await collateralContract.mint(
+          pjWallet.address,
+          requiredCollateral
+        );
+        await mintTx.wait();
+        addLog(
+          `Mint de ${ethers.formatEther(
+            requiredCollateral
+          )} colateral realizado`
+        );
+      }
+
+      // Aprovar o contrato FIDC para usar o colateral
+      addLog("Aprovando uso do colateral pelo contrato FIDC...");
       const approveTx = await collateralContract.approve(
         FIDC_Management_address,
-        newAmount
+        requiredCollateral
       );
-      addLog(`Approval transaction sent: ${approveTx.hash}`);
-      setTxHash(approveTx.hash);
+      await approveTx.wait();
+      addLog("Aprovação do colateral concluída");
 
-      const approveReceipt = await approveTx.wait();
-      addLog(`Approval transaction confirmed: ${approveReceipt?.hash}`);
-
+      // Realizar a antecipação
       const fidcContract = Fidc__factory.connect(
         FIDC_Management_address,
         pjWallet
       );
 
-      addLog("Sending anticipation transaction...");
+      addLog("Enviando transação de antecipação...");
       const anticipationTx = await fidcContract.anticipation(
-        newAmount,
+        requestedAmount,
         collateral_address,
         anticipationFidcId,
         { gasLimit: 1000000 }
       );
 
-      addLog(`Anticipation transaction sent: ${anticipationTx.hash}`);
+      addLog(`Transação enviada: ${anticipationTx.hash}`);
       setTxHash(anticipationTx.hash);
 
       const receipt = await anticipationTx.wait();
-      addLog("Anticipation transaction confirmed!");
+      addLog("Transação confirmada!");
 
       const events = await parseEvents(receipt, fidcContract);
       events.forEach((event) => {
-        addLog(`Event: ${event.name}`);
+        addLog(`Evento: ${event.name}`);
       });
 
       const anticipationEvent = events.find(
@@ -313,15 +399,18 @@ export function useContract() {
 
       if (anticipationEvent) {
         const { args } = anticipationEvent;
-        addLog(`Anticipation processed for FIDC ID: ${args[0]}`);
-        addLog(`PJ Address: ${args[1]}`);
-        addLog(`Amount: ${ethers.formatEther(args[2])}`);
-        addLog(`Collateral Token: ${args[3]}`);
-        addLog(`Required Collateral: ${ethers.formatEther(args[4])}`);
+        addLog(`
+          Antecipação processada:
+          FIDC ID: ${args[0]}
+          PJ: ${args[1]}
+          Amount: ${ethers.formatEther(args[2])} Stablecoin
+          Colateral: ${args[3]}
+          Colateral Required: ${ethers.formatEther(args[4])}
+        `);
       }
 
       await updateBalances();
-      addLog("Anticipation completed successfully");
+      addLog("Processo de antecipação concluído com sucesso");
 
       return {
         receipt,
@@ -329,8 +418,8 @@ export function useContract() {
         anticipationEvent,
       };
     } catch (err: any) {
-      setError(err.message || "Error processing anticipation");
-      addLog(`Error: ${err.message || "Unknown error"}`);
+      setError(err.message || "Erro no processo de antecipação");
+      addLog(`Erro: ${err.message || "Erro desconhecido"}`);
       throw err;
     } finally {
       setIsProcessing(false);
@@ -353,27 +442,71 @@ export function useContract() {
         adquiWallet
       );
 
+      // Obtém endereço do receivable do FIDC
       addLog("Getting receivable address...");
       const receivableAddress = await fidcContract.getFIDCReceivable(
         compensationFidcId
       );
       addLog(`Receivable address: ${receivableAddress}`);
 
-      const erc20Contract = Erc20__factory.connect(
-        collateral_address,
+      if (!receivableAddress || receivableAddress === ethers.ZeroAddress) {
+        throw new Error("No receivable address found for this FIDC");
+      }
+
+      // Conecta ao contrato de receivables
+      const receivableContract = Erc20__factory.connect(
+        receivableAddress,
         adquiWallet
       );
 
-      addLog("Getting receivable balance...");
-      const toPay = await erc20Contract.balanceOf(receivableAddress);
-      const toPayFormatted = Number(ethers.formatEther(toPay));
-      addLog(`Amount to pay: ${toPay}`);
-      addLog(`Amount to pay formatted: ${toPayFormatted}`);
+      // Obtém o saldo de receivables do FIDC
+      const receivablesBal = await receivableContract.balanceOf(
+        FIDC_Management_address
+      );
+      const receivablesAmount = ethers.formatEther(receivablesBal);
+      addLog(`Receivables to compensate: ${receivablesAmount}`);
 
+      // Conecta ao contrato de stablecoin (ERC20Mock)
+      const stablecoinContract = Erc20__factory.connect(
+        ERC20Mock_address,
+        adquiWallet
+      );
+
+      // Verifica o saldo de stablecoins do adquirente
+      const adquiBalance = await stablecoinContract.balanceOf(
+        adquiWallet.address
+      );
+      addLog(
+        `Current adquirente stablecoin balance: ${ethers.formatEther(
+          adquiBalance
+        )}`
+      );
+
+      // Se o saldo for insuficiente, faz o mint
+      if (adquiBalance < receivablesBal) {
+        addLog("Insufficient stablecoin balance. Minting required amount...");
+        const mintTx = await stablecoinContract.mint(
+          adquiWallet.address,
+          receivablesBal
+        );
+        await mintTx.wait();
+        addLog(`Minted ${receivablesAmount} stablecoins to adquirente`);
+      }
+
+      // Aprova o FIDC para gastar os stablecoins
+      addLog("Approving FIDC to spend stablecoins...");
+      const approveTx = await stablecoinContract.approve(
+        FIDC_Management_address,
+        receivablesBal
+      );
+      await approveTx.wait();
+      addLog(`Approved ${receivablesAmount} stablecoins for FIDC`);
+
+      // Executa a compensação
       addLog("Sending compensation transaction...");
       const compensationTx = await fidcContract.compensationPay(
-        receivableAddress,
-        toPayFormatted,
+        compensationFidcId,
+        receivablesBal,
         { gasLimit: 1000000 }
       );
 
