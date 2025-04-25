@@ -35,12 +35,12 @@ The easiest way to deploy your Next.js app is to use the [Vercel Platform](https
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/deployment) for more details.
 
-
 ### Fluxo completo – passo a passo
 
 ---
 
-#### 1. Criação do FIDC  
+#### 1. Criação do FIDC
+
 ```solidity
 initializeFIDC(
   address _manager,     // gestor do fundo
@@ -53,53 +53,56 @@ initializeFIDC(
 )
 ```
 
-* **Quem assina?** a carteira do **manager** (`.env → NEXT_PUBLIC_PRIVATE_KEY_MANAGER`).  
-* **Onde escolho o endereço?** componente **WalletSelector**.  
-* **Resultado:** um novo FIDC é criado; guardamos o `fidcId` que o evento `FIDCCreated` devolve.
+- **Quem assina?** a carteira do **manager** (`.env → NEXT_PUBLIC_PRIVATE_KEY_MANAGER`).
+- **Onde escolho o endereço?** componente **WalletSelector**.
+- **Resultado:** um novo FIDC é criado; guardamos o `fidcId` que o evento `FIDCCreated` devolve.
 
 ---
 
-#### 2. Aporte inicial dos investidores  
+#### 2. Aporte inicial dos investidores
+
 ```solidity
 invest(uint256 fidcId, uint256 amount)
 ```
 
-* Usamos a **demoWallet** (private-key dentro do código) como investidor-teste.  
-* Antes de chamar `invest`, damos **approve** no token MockERC20 (stablecoin) para o contrato `FIDC_Management_address`.  
-* Neste exemplo enviamos um valor alto para encher a liquidez do fundo.
+- Usamos a **demoWallet** (private-key dentro do código) como investidor-teste.
+- Antes de chamar `invest`, damos **approve** no token MockERC20 (stablecoin) para o contrato `FIDC_Management_address`.
+- Neste exemplo enviamos um valor alto para encher a liquidez do fundo.
 
 ---
 
-#### 3. Antecipação de recebíveis para o PJ  
+#### 3. Antecipação de recebíveis para o PJ
+
 ```solidity
 anticipation(uint256 amount, address collateralToken, uint256 fidcId)
 ```
 
-* **Carteira usada:** a do **PJ** (`.env → NEXT_PUBLIC_PRIVATE_KEY_PJ`).  
-* O PJ já possui o token de garantia (`collateral_address`).  
-* Passos no front-end:  
-  1. `approve` do **collateralToken** para o contrato FIDC.  
-  2. Chamada de `anticipation`.  
-* Evento disparado:  
+- **Carteira usada:** a do **PJ** (`.env → NEXT_PUBLIC_PRIVATE_KEY_PJ`).
+- O PJ já possui o token de garantia (`collateral_address`).
+- Passos no front-end:
+  1. `approve` do **collateralToken** para o contrato FIDC.
+  2. Chamada de `anticipation`.
+- Evento disparado:
   ```solidity
   Anticipation(fidcId, pj, amount, collateralToken, requiredCollateral)
-  ```  
-  * `amount` → valor que o PJ antecipou (recebe em stablecoin).  
-  * `requiredCollateral` → quanto de colateral saiu da carteira dele.
+  ```
+  - `amount` → valor que o PJ antecipou (recebe em stablecoin).
+  - `requiredCollateral` → quanto de colateral saiu da carteira dele.
 
 ---
 
-#### 4. Pagamento do adquirente (liquidando o recebível)  
+#### 4. Pagamento do adquirente (liquidando o recebível)
+
 ```solidity
 compensationPay(uint256 fidcId, uint256 amount)
 ```
 
-* **Carteira usada:** **adquirente** (`NEXT_PUBLIC_PRIVATE_KEY_ADQUIRENTE`).  
-* Como encontrar `amount` certo:  
-  1. `address rec = FIDC_Management.getFIDCReceivable(fidcId);`  
-  2. `uint256 toPay = ERC20(rec).balanceOf(FIDC_Management_address);`  
-* Transferimos exatamente `toPay` em stablecoin.  
-* Evento disparado:  
+- **Carteira usada:** **adquirente** (`NEXT_PUBLIC_PRIVATE_KEY_ADQUIRENTE`).
+- Como encontrar `amount` certo:
+  1. `address rec = FIDC_Management.getFIDCReceivable(fidcId);`
+  2. `uint256 toPay = ERC20(rec).balanceOf(FIDC_Management_address);`
+- Transferimos exatamente `toPay` em stablecoin.
+- Evento disparado:
   ```solidity
   CompensationProcessed(
     fidcId,
@@ -113,14 +116,15 @@ compensationPay(uint256 fidcId, uint256 amount)
 
 ---
 
-#### 5. Resgate final pelo gestor  
+#### 5. Resgate final pelo gestor
+
 ```solidity
 redeemAllManager(uint256 fidcId)
 ```
 
-* **Quem assina?** o **manager** do fundo.  
-* Ele passa a lista de investidores e distribui principal + rendimentos.  
-* Evento principal:  
+- **Quem assina?** o **manager** do fundo.
+- Ele passa a lista de investidores e distribui principal + rendimentos.
+- Evento principal:
   ```solidity
   FIDCRedemption(
     fidcId,
@@ -134,17 +138,17 @@ redeemAllManager(uint256 fidcId)
     investmentDate,
     redemptionDate
   )
-  ```  
+  ```
   Todas essas informações devem ser exibidas no front-end para que o usuário veja a liquidação completa do ativo.
 
 ---
 
 ##### Resumindo o fluxo
 
-1. **Manager** cria o fundo ➜ recebe `fidcId`.  
-2. **Investidores** aprovam stablecoin e chamam `invest`.  
-3. **PJ** deposita colateral e antecipa (`anticipation`).  
-4. **Adquirente** quita o recebível (`compensationPay`).  
-5. **Manager** encerra e distribui valores (`redeemAllManager`).  
+1. **Manager** cria o fundo ➜ recebe `fidcId`.
+2. **Investidores** aprovam stablecoin e chamam `invest`.
+3. **PJ** deposita colateral e antecipa (`anticipation`).
+4. **Adquirente** quita o recebível (`compensationPay`).
+5. **Manager** encerra e distribui valores (`redeemAllManager`).
 
 Cada etapa emite eventos que o front captura para mostrar status e valores ao usuário de forma transparente.
