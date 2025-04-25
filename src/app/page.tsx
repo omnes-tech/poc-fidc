@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import CapitareHeader from "@/components/CapitareHeader";
 import { useContract } from "@/hooks/useContract";
 import { EventData } from "@/interfaces";
@@ -21,11 +21,16 @@ export default function ManagerPage() {
     isProcessing,
     debugTransactionEvents,
     onGetFIDC,
+    onGetAllInvestors,
     txHash,
   } = useContract();
 
   const [currentOperation, setCurrentOperation] = useState<string>("");
   const [currentEvents, setCurrentEvents] = useState<EventData[]>([]);
+  const [investors, setInvestors] = useState<string[]>([]);
+  const [showInvestors, setShowInvestors] = useState<boolean>(false);
+  // Estado para controlar se o popup deve ser aberto forçadamente
+  const [forceOpenModal, setForceOpenModal] = useState<boolean>(false);
 
   const [investAmount, setInvestAmount] = useState(1000);
   const [anticipationAmount, setAnticipationAmount] = useState(500);
@@ -36,6 +41,7 @@ export default function ManagerPage() {
     try {
       setCurrentOperation("Inicialização de FIDC");
       setCurrentEvents([]);
+      setShowInvestors(false);
       const result = await onInitializeFIDC();
       setCurrentEvents(result.events || []);
     } catch (error) {
@@ -45,10 +51,11 @@ export default function ManagerPage() {
 
   const handleInvestFIDC = async () => {
     if (!fidcId || investAmount <= 0) return;
-    
+
     try {
       setCurrentOperation("Investimento");
       setCurrentEvents([]);
+      setShowInvestors(false);
       const result = await onInvestFIDC(fidcId, investAmount);
       setCurrentEvents([
         ...(result.approveEvents || []),
@@ -61,10 +68,11 @@ export default function ManagerPage() {
 
   const handleAnticipation = async () => {
     if (!fidcId || anticipationAmount <= 0) return;
-    
+
     try {
       setCurrentOperation("Antecipação");
       setCurrentEvents([]);
+      setShowInvestors(false);
       const result = await onAnticipation(fidcId, anticipationAmount);
       setCurrentEvents(result.events || []);
     } catch (error) {
@@ -74,10 +82,11 @@ export default function ManagerPage() {
 
   const handleCompensation = async () => {
     if (!fidcId) return;
-    
+
     try {
       setCurrentOperation("Compensação");
       setCurrentEvents([]);
+      setShowInvestors(false);
       const result = await onCompensation(fidcId);
       setCurrentEvents(result.events || []);
     } catch (error) {
@@ -87,10 +96,11 @@ export default function ManagerPage() {
 
   const handleRedeem = async () => {
     if (!fidcId) return;
-    
+
     try {
       setCurrentOperation("Resgate");
       setCurrentEvents([]);
+      setShowInvestors(false);
       const result = await onRedeem(fidcId);
       setCurrentEvents(result.events || []);
     } catch (error) {
@@ -100,16 +110,39 @@ export default function ManagerPage() {
 
   const handleDebugTransaction = async () => {
     if (!debugTxHash) return;
-    
+
     try {
       setCurrentOperation("Depuração de Transação");
       setCurrentEvents([]);
+      setShowInvestors(false);
       const result = await debugTransactionEvents(debugTxHash);
       if (result && result.events) {
         setCurrentEvents(result.events || []);
       }
     } catch (error) {
       console.error("Erro ao depurar transação:", error);
+    }
+  };
+
+  const handleGetAllInvestors = async () => {
+    if (!fidcId) return;
+
+    try {
+      setCurrentOperation("Lista de Investidores");
+      setCurrentEvents([]);
+      setShowInvestors(true);
+      // Força a abertura do modal
+      setForceOpenModal(true);
+
+      const result = await onGetAllInvestors(fidcId);
+      if (result && result.investors) {
+        setInvestors(result.investors);
+      } else {
+        setInvestors([]);
+      }
+    } catch (error) {
+      console.error("Erro ao obter lista de investidores:", error);
+      setInvestors([]);
     }
   };
 
@@ -129,11 +162,14 @@ export default function ManagerPage() {
         </p>
 
         {/* Um único componente de status para todas as transações */}
-        <TransactionStatus 
-          hash={txHash} 
+        <TransactionStatus
+          hash={txHash}
           isProcessing={isProcessing}
           operation={currentOperation}
           events={currentEvents}
+          investors={showInvestors ? investors : undefined}
+          forceOpen={forceOpenModal}
+          onModalClose={() => setForceOpenModal(false)}
         />
 
         <div className="mb-8">
@@ -257,7 +293,7 @@ export default function ManagerPage() {
                   </button>
                 </div>
               </div>
-              
+
               <div>
                 <h4 className="font-medium text-gray-600 mb-2">
                   Carregar FIDC Existente
@@ -283,6 +319,38 @@ export default function ManagerPage() {
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-8 mb-12">
+          <div className="capitare-card">
+            <div className="capitare-icon">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-6 w-6"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
+              </svg>
+            </div>
+            <h2 className="capitare-card-title">Get All Investors</h2>
+
+            <div className="space-y-4">
+              <button
+                onClick={handleGetAllInvestors}
+                disabled={isProcessing || !fidcId}
+                className="capitare-btn w-full"
+              >
+                {isProcessing ? "Processing..." : "Get All Investors"}
+              </button>
             </div>
           </div>
         </div>
@@ -412,7 +480,7 @@ export default function ManagerPage() {
                 disabled={isProcessing || !fidcId}
                 className="capitare-btn w-full"
               >
-                {isProcessing ? "Processing..." : "Process Anticipation"}
+                {isProcessing ? "Processing..." : "Liquidation"}
               </button>
             </div>
           </div>
@@ -485,8 +553,8 @@ export default function ManagerPage() {
         <div className="capitare-card">
           <div className="flex justify-between items-center w-full mb-2">
             <h2 className="capitare-card-title">Transaction Logs</h2>
-            <button 
-              onClick={clearLogs} 
+            <button
+              onClick={clearLogs}
               className="capitare-btn-outline text-sm px-2 py-1"
             >
               Clear Logs

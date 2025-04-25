@@ -196,25 +196,25 @@ export function useContract() {
       setError(null);
       addLog("Initializing FIDC...");
 
-      const managerWallet = await getWallet("manager");
-      const fidcContract = Fidc__factory.connect(
-        FIDC_Management_address,
-        managerWallet
-      );
-      const fidcConfig = { fee: 100, annual: 1800, grace: 86400, senior: 500 };
+    const managerWallet = await getWallet("manager");
+    const fidcContract = Fidc__factory.connect(
+      FIDC_Management_address,
+      managerWallet
+    );
+    const fidcConfig = { fee: 100, annual: 1800, grace: 86400, senior: 500 };
 
       addLog(`Using manager wallet: ${managerWallet.address}`);
       addLog("Sending initializeFIDC transaction...");
 
-      const initializeTx = await fidcContract.initializeFIDC(
-        adminAddresses.manager_address,
-        adminAddresses.pj_address,
-        adminAddresses.adqui_address,
-        fidcConfig.fee,
-        fidcConfig.annual,
-        fidcConfig.grace,
-        fidcConfig.senior
-      );
+    const initializeTx = await fidcContract.initializeFIDC(
+      adminAddresses.manager_address,
+      adminAddresses.pj_address,
+      adminAddresses.adqui_address,
+      fidcConfig.fee,
+      fidcConfig.annual,
+      fidcConfig.grace,
+      fidcConfig.senior
+    );
 
       addLog(`Transaction sent: ${initializeTx.hash}`);
       setTxHash(initializeTx.hash);
@@ -262,17 +262,17 @@ export function useContract() {
       const newAmount = ethers.parseEther(amount.toString());
       addLog(`Investing ${newAmount} tokens in FIDC ID: ${investFidcId}...`);
 
-      const demoWallet = await getWallet("demo");
+    const demoWallet = await getWallet("demo");
       addLog(`Using demo wallet: ${demoWallet.address}`);
 
       const erc20Contract = Erc20__factory.connect(
         ERC20Mock_address,
         demoWallet
       );
-      const fidcContract = Fidc__factory.connect(
-        FIDC_Management_address,
-        demoWallet
-      );
+    const fidcContract = Fidc__factory.connect(
+      FIDC_Management_address,
+      demoWallet
+    );
 
       // Verificar saldo de quotas antes do investimento
       const quotasBeforeInvestment = await fidcContract.balanceOf(
@@ -285,8 +285,8 @@ export function useContract() {
       );
 
       addLog("Sending approve transaction...");
-      const approveTx = await erc20Contract.approve(
-        FIDC_Management_address,
+    const approveTx = await erc20Contract.approve(
+      FIDC_Management_address,
         newAmount
       );
 
@@ -600,13 +600,13 @@ export function useContract() {
       setError(null);
       addLog(`Processing redemption for FIDC ID: ${redeemFidcId}...`);
 
-      const managerWallet = await getWallet("manager");
+    const managerWallet = await getWallet("manager");
       addLog(`Using manager wallet: ${managerWallet.address}`);
 
-      const fidcContract = Fidc__factory.connect(
-        FIDC_Management_address,
-        managerWallet
-      );
+    const fidcContract = Fidc__factory.connect(
+      FIDC_Management_address,
+      managerWallet
+    );
 
       addLog("Sending redemption transaction...");
       const redeemTx = await fidcContract.redeemAllManager(redeemFidcId, {
@@ -670,6 +670,20 @@ export function useContract() {
     } finally {
       setIsProcessing(false);
     }
+  }
+
+  async function onGetAllInvestors(fidcId: number) {
+    addLog(`Getting all investors for FIDC ID: ${fidcId}`);
+    const demoWallet = await getWallet("demo");
+    const fidcContract = Fidc__factory.connect(
+      FIDC_Management_address,
+      demoWallet
+    );
+    addLog(`Getting all investors for FIDC ID: ${fidcId}`);
+    const investors = await fidcContract.getAllInvestors(fidcId);
+    console.log(investors);
+    addLog(`Investors: ${investors}`);
+    return investors;
   }
 
   async function onGetFIDC(id: number) {
@@ -777,6 +791,7 @@ export function useContract() {
     isProcessing,
     error,
     txHash,
-    debugTransactionEvents
+    debugTransactionEvents,
+    onGetAllInvestors,
   };
 }

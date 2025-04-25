@@ -134,21 +134,27 @@ export function TransactionStatus({
   isProcessing,
   operation,
   events = [],
+  investors = [],
+  forceOpen = false,
+  onModalClose,
 }: {
   hash: string | null;
   isProcessing: boolean;
   operation: string;
   events?: EventData[];
+  investors?: string[];
+  forceOpen?: boolean;
+  onModalClose?: () => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [expandedEvent, setExpandedEvent] = useState<number | null>(null);
   const etherscanUrl = hash ? `https://holesky.etherscan.io/tx/${hash}` : "";
 
   useEffect(() => {
-    if (isProcessing) {
+    if (isProcessing || forceOpen) {
       setIsOpen(true);
     }
-  }, [isProcessing]);
+  }, [isProcessing, forceOpen]);
 
   // Garantir que temos um array de eventos válido
   const processedEvents = events || [];
@@ -156,11 +162,19 @@ export function TransactionStatus({
   // Debug para ajudar a verificar a estrutura dos eventos
   console.log("Eventos recebidos:", JSON.stringify(convertBigIntToString(processedEvents)));
 
-  if (!hash && !isProcessing) return null;
+  if (!hash && !isProcessing && !investors.length) return null;
+
+  // Função para fechar o modal e notificar o componente pai
+  const handleClose = () => {
+    setIsOpen(false);
+    if (onModalClose) {
+      onModalClose();
+    }
+  };
 
   return (
     <>
-      {hash && !isOpen && (
+      {(hash || investors.length > 0) && !isOpen && (
         <button
           onClick={() => setIsOpen(true)}
           className="fixed bottom-4 right-4 px-4 py-2 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 flex items-center z-50"
@@ -179,7 +193,7 @@ export function TransactionStatus({
               d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
             />
           </svg>
-          Ver transação
+          {investors.length > 0 ? "Ver investidores" : "Ver transação"}
         </button>
       )}
 
@@ -193,7 +207,7 @@ export function TransactionStatus({
                   : `${operation} - Concluído`}
               </h3>
               <button
-                onClick={() => setIsOpen(false)}
+                onClick={handleClose}
                 className="text-white hover:text-gray-200 focus:outline-none"
               >
                 <svg
@@ -249,6 +263,38 @@ export function TransactionStatus({
                       />
                     </svg>
                   </a>
+                </div>
+              )}
+
+              {/* Exibição de investidores */}
+              {!isProcessing && investors && investors.length > 0 && (
+                <div>
+                  <h4 className="font-medium text-gray-700 mb-4">
+                    Investidores do FIDC ({investors.length}):
+                  </h4>
+                  <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                    {investors.length === 0 ? (
+                      <p className="text-gray-500 italic">Nenhum investidor encontrado</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {investors.map((investor, index) => (
+                          <div key={index} className="flex items-center py-2 border-b border-gray-200">
+                            <div className="bg-blue-100 text-blue-800 font-bold rounded-full w-8 h-8 flex items-center justify-center mr-3">
+                              {index + 1}
+                            </div>
+                            <a 
+                              href={`https://holesky.etherscan.io/address/${investor}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-600 hover:text-blue-800 hover:underline font-mono break-all text-sm"
+                            >
+                              {investor}
+                            </a>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -341,7 +387,7 @@ export function TransactionStatus({
                                     <span className="font-mono text-sm text-gray-500 sm:w-1/3 mb-1 sm:mb-0">
                                       {key}:
                                     </span>
-                                    <span className="font-mono text-sm break-all sm:w-2/3 bg-gray-50 p-1 rounded">
+                                    <span className="font-mono text-sm text-gray-500 break-all w-full bg-gray-50 p-1 rounded">
                                       {typeof value === "bigint"
                                         ? formatEventValue(value)
                                         : typeof value === "object"
@@ -365,7 +411,7 @@ export function TransactionStatus({
                 </div>
               )}
 
-              {!isProcessing && (!processedEvents || processedEvents.length === 0) && hash && (
+              {!isProcessing && !investors.length && (!processedEvents || processedEvents.length === 0) && hash && (
                 <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4">
                   <div className="flex">
                     <div className="flex-shrink-0">
@@ -403,7 +449,7 @@ export function TransactionStatus({
                 </a>
               )}
               <button
-                onClick={() => setIsOpen(false)}
+                onClick={handleClose}
                 className="inline-flex items-center px-4 py-2 border border-transparent text-sm leading-5 font-medium rounded-md text-white bg-blue-600 hover:bg-blue-500 focus:outline-none focus:border-blue-700 focus:shadow-outline-blue active:bg-blue-700 transition ease-in-out duration-150"
               >
                 Fechar
