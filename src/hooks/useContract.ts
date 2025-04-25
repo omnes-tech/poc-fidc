@@ -119,20 +119,74 @@ export function useContract() {
   ) {
     const events = [];
     if (receipt && receipt.logs) {
+      addLog(`Parsing ${receipt.logs.length} logs from transaction ${receipt.hash}`);
       for (const log of receipt.logs) {
         try {
+          // Log raw log data para depuração
+          addLog(`Log address: ${log.address}`);
+          addLog(`Log topics: ${JSON.stringify(log.topics)}`);
+          
+          // Verifica se o log pertence ao nosso contrato
+          if (log.address.toLowerCase() === contractInstance.target.toLowerCase()) {
+            addLog(`✓ Log pertence ao contrato ${log.address}`);
+          } else {
+            addLog(`✗ Log de outro contrato ${log.address} != ${contractInstance.target}`);
+            // Tente identificar qual contrato emitiu o evento
+            try {
+              // Código específico apenas para FIDC
+              if (contractInstance.interface.fragments.some((f: any) => f.name === "initializeFIDC")) {
+                const fidcInterface = Fidc__factory.createInterface();
+                const parsedFromFidc = fidcInterface.parseLog({
+                  topics: log.topics as string[], 
+                  data: log.data
+                });
+                if (parsedFromFidc) {
+                  addLog(`Evento identificado do FIDC: ${parsedFromFidc.name}`);
+                  events.push({ name: parsedFromFidc.name, args: parsedFromFidc.args });
+                  continue;
+                }
+              }
+              
+              // Código específico apenas para ERC20
+              if (contractInstance.interface.fragments.some((f: any) => f.name === "transfer")) {
+                const erc20Interface = Erc20__factory.createInterface();
+                const parsedFromErc20 = erc20Interface.parseLog({
+                  topics: log.topics as string[], 
+                  data: log.data
+                });
+                if (parsedFromErc20) {
+                  addLog(`Evento identificado do ERC20: ${parsedFromErc20.name}`);
+                  events.push({ name: parsedFromErc20.name, args: parsedFromErc20.args });
+                  continue;
+                }
+              }
+            } catch (innerError) {
+              // Ignora erro ao tentar parsear com outra interface
+            }
+          }
+          
+          // Tenta fazer o parse usando a interface do contrato
           const parsedLog = contractInstance.interface.parseLog({
             topics: log.topics as string[],
             data: log.data,
           });
+          
           if (parsedLog) {
+            addLog(`✓ Evento parseado com sucesso: ${parsedLog.name}`);
             events.push({ name: parsedLog.name, args: parsedLog.args });
+          } else {
+            addLog(`✗ Não foi possível parsear o log`);
           }
-        } catch (error) {
+        } catch (error: any) {
+          addLog(`⚠️ Erro ao parsear log: ${error.message}`);
           continue;
         }
       }
+    } else {
+      addLog(`⚠️ Nenhum log encontrado no recibo da transação`);
     }
+    
+    addLog(`Total de eventos encontrados: ${events.length}`);
     return events;
   }
 
@@ -309,8 +363,7 @@ export function useContract() {
       setIsProcessing(true);
       setError(null);
       const requestedAmount = ethers.parseEther(amount.toString());
-      // Calcula o colateral necessário (120% do amount solicitado)
-      const requiredCollateral = (requestedAmount * 120n) / 100n;
+      const requiredCollateral = (requestedAmount * BigInt(120)) / BigInt(100);
 
       addLog(
         `Iniciando antecipação...
@@ -320,19 +373,14 @@ export function useContract() {
         )} Collateral`
       );
 
-      // Usar a carteira PJ correta
       const pjWallet = await getWallet("pj");
       addLog(`Usando carteira PJ: ${pjWallet.address}`);
-
-      // Verificar se é o endereço PJ correto
       if (
         pjWallet.address.toLowerCase() !==
         adminAddresses.pj_address.toLowerCase()
       ) {
         throw new Error("Endereço incorreto para operação de PJ");
       }
-
-      // Verificar e fornecer colateral se necessário
       const collateralContract = Collateral__factory.connect(
         collateral_address,
         pjWallet
@@ -359,7 +407,6 @@ export function useContract() {
         );
       }
 
-      // Aprovar o contrato FIDC para usar o colateral
       addLog("Aprovando uso do colateral pelo contrato FIDC...");
       const approveTx = await collateralContract.approve(
         FIDC_Management_address,
@@ -368,7 +415,6 @@ export function useContract() {
       await approveTx.wait();
       addLog("Aprovação do colateral concluída");
 
-      // Realizar a antecipação
       const fidcContract = Fidc__factory.connect(
         FIDC_Management_address,
         pjWallet
@@ -634,13 +680,79 @@ export function useContract() {
       demoWallet
     );
     const fidc = await fidcContract.fidcs(id);
+    console.log(fidc);
     if (fidc[7].toString() === "true") {
       addLog(`FIDC found: ${id}`);
+      console.log(id);
       setFidcId(Number(id));
       return fidc;
     }
     addLog("FIDC not found");
     return null;
+  }
+
+  async function debugTransactionEvents(txHash: string) {
+    try {
+      setIsProcessing(true);
+      addLog(`Depurando transação: ${txHash}`);
+      
+      const provider = await getProvider();
+      addLog(`Obtendo recibo da transação...`);
+      
+      // Obter o recibo da transação
+      const receipt = await provider.getTransactionReceipt(txHash);
+      if (!receipt) {
+        addLog(`⚠️ Recibo não encontrado para a transação ${txHash}`);
+        return;
+      }
+      
+      addLog(`Recibo encontrado. Logs: ${receipt.logs.length}`);
+      
+      // Obter o código do contrato para descobrir que interface usar
+      const contractAddress = receipt.to;
+      addLog(`Contrato alvo: ${contractAddress}`);
+      
+      // Tentar com várias interfaces
+      addLog(`Tentando com interface FIDC...`);
+      const fidcContract = Fidc__factory.connect(contractAddress || "", provider);
+      const fidcEvents = await parseEvents(receipt, fidcContract);
+      
+      addLog(`Tentando com interface ERC20...`);
+      const erc20Contract = Erc20__factory.connect(contractAddress || "", provider);
+      const erc20Events = await parseEvents(receipt, erc20Contract);
+      
+      addLog(`Tentando com interface Collateral...`);
+      const collateralContract = Collateral__factory.connect(contractAddress || "", provider);
+      const collateralEvents = await parseEvents(receipt, collateralContract);
+      
+      // Retornar todos os eventos encontrados
+      const allEvents = [
+        ...fidcEvents, 
+        ...erc20Events, 
+        ...collateralEvents
+      ].filter(
+        // Remover duplicatas
+        (event, index, self) => 
+          index === self.findIndex(e => e.name === event.name && JSON.stringify(e.args) === JSON.stringify(event.args))
+      );
+      
+      addLog(`Total de eventos únicos encontrados: ${allEvents.length}`);
+      
+      // Exibir cada evento encontrado
+      allEvents.forEach(event => {
+        addLog(`Evento: ${event.name}`);
+        addLog(`Argumentos: ${JSON.stringify(Object.values(event.args).map(arg => 
+          typeof arg === 'bigint' ? arg.toString() : arg
+        ))}`);
+      });
+      
+      return { receipt, events: allEvents };
+    } catch (err: any) {
+      setError(err.message || "Erro ao depurar transação");
+      addLog(`Erro: ${err.message || "Erro desconhecido"}`);
+    } finally {
+      setIsProcessing(false);
+    }
   }
 
   useEffect(() => {
@@ -665,5 +777,6 @@ export function useContract() {
     isProcessing,
     error,
     txHash,
+    debugTransactionEvents
   };
 }

@@ -2,10 +2,11 @@
 import { useState } from "react";
 import CapitareHeader from "@/components/CapitareHeader";
 import { useContract } from "@/hooks/useContract";
+import { EventData } from "@/interfaces";
+import { TransactionStatus } from "@/components/TransactionStatus";
 
 export default function ManagerPage() {
   const {
-    onGetFIDC,
     onInitializeFIDC,
     onInvestFIDC,
     onAnticipation,
@@ -18,10 +19,99 @@ export default function ManagerPage() {
     logs,
     clearLogs,
     isProcessing,
+    debugTransactionEvents,
+    onGetFIDC,
+    txHash,
   } = useContract();
+
+  const [currentOperation, setCurrentOperation] = useState<string>("");
+  const [currentEvents, setCurrentEvents] = useState<EventData[]>([]);
+
   const [investAmount, setInvestAmount] = useState(1000);
   const [anticipationAmount, setAnticipationAmount] = useState(500);
-  const [fidc, setFidc] = useState<any>(null);
+  const [debugTxHash, setDebugTxHash] = useState("");
+  const [fidcIdInput, setFidcIdInput] = useState("");
+
+  const handleInitializeFIDC = async () => {
+    try {
+      setCurrentOperation("Inicialização de FIDC");
+      setCurrentEvents([]);
+      const result = await onInitializeFIDC();
+      setCurrentEvents(result.events || []);
+    } catch (error) {
+      console.error("Erro ao inicializar FIDC:", error);
+    }
+  };
+
+  const handleInvestFIDC = async () => {
+    if (!fidcId || investAmount <= 0) return;
+    
+    try {
+      setCurrentOperation("Investimento");
+      setCurrentEvents([]);
+      const result = await onInvestFIDC(fidcId, investAmount);
+      setCurrentEvents([
+        ...(result.approveEvents || []),
+        ...(result.investEvents || []),
+      ]);
+    } catch (error) {
+      console.error("Erro ao investir no FIDC:", error);
+    }
+  };
+
+  const handleAnticipation = async () => {
+    if (!fidcId || anticipationAmount <= 0) return;
+    
+    try {
+      setCurrentOperation("Antecipação");
+      setCurrentEvents([]);
+      const result = await onAnticipation(fidcId, anticipationAmount);
+      setCurrentEvents(result.events || []);
+    } catch (error) {
+      console.error("Erro na antecipação:", error);
+    }
+  };
+
+  const handleCompensation = async () => {
+    if (!fidcId) return;
+    
+    try {
+      setCurrentOperation("Compensação");
+      setCurrentEvents([]);
+      const result = await onCompensation(fidcId);
+      setCurrentEvents(result.events || []);
+    } catch (error) {
+      console.error("Erro na compensação:", error);
+    }
+  };
+
+  const handleRedeem = async () => {
+    if (!fidcId) return;
+    
+    try {
+      setCurrentOperation("Resgate");
+      setCurrentEvents([]);
+      const result = await onRedeem(fidcId);
+      setCurrentEvents(result.events || []);
+    } catch (error) {
+      console.error("Erro no resgate:", error);
+    }
+  };
+
+  const handleDebugTransaction = async () => {
+    if (!debugTxHash) return;
+    
+    try {
+      setCurrentOperation("Depuração de Transação");
+      setCurrentEvents([]);
+      const result = await debugTransactionEvents(debugTxHash);
+      if (result && result.events) {
+        setCurrentEvents(result.events || []);
+      }
+    } catch (error) {
+      console.error("Erro ao depurar transação:", error);
+    }
+  };
 
   return (
     <div className="capitare-gradient-bg min-h-screen pt-20 pb-12">
@@ -37,6 +127,14 @@ export default function ManagerPage() {
           potential opportunities. See below the steps to start investing with
           Capitare.
         </p>
+
+        {/* Um único componente de status para todas as transações */}
+        <TransactionStatus 
+          hash={txHash} 
+          isProcessing={isProcessing}
+          operation={currentOperation}
+          events={currentEvents}
+        />
 
         <div className="mb-8">
           <div className="capitare-card">
@@ -132,55 +230,64 @@ export default function ManagerPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-8 mb-12">
+        <div className="mb-8">
           <div className="capitare-card">
-            <div className="capitare-icon">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-6 w-6"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 4v16m8-8H4"
-                />
-              </svg>
-            </div>
-            <h2 className="capitare-card-title">Get FIDC</h2>
-
-            <div className="space-y-4">
-              <label className="capitare-input-label"> FIDC ID </label>
-              <input
-                type="number"
-                value={fidc!}
-                onChange={(e) => setFidc(Number(e.target.value))}
-                className="capitare-input"
-                placeholder="1"
-              />
-              <button
-                onClick={() => onGetFIDC(fidc!)}
-                disabled={isProcessing}
-                className="capitare-btn w-full"
-              >
-                {isProcessing ? "Processing..." : "Get FIDC"}
-              </button>
-
-              {fidcId && (
-                <div className="bg-green-50 border-l-4 border-green-400 p-3 mt-3">
-                  <p className="text-sm text-green-700">
-                    <span className="font-semibold">FIDC Active</span> - ID:{" "}
-                    {fidcId}
-                  </p>
+            <h3 className="text-lg font-semibold text-gray-700 mb-2">
+              Debug Tools
+            </h3>
+            <div className="grid grid-cols-2 gap-6">
+              <div>
+                <h4 className="font-medium text-gray-600 mb-2">
+                  Depurar Transação
+                </h4>
+                <div className="flex gap-2 mb-4">
+                  <input
+                    type="text"
+                    value={debugTxHash}
+                    onChange={(e) => setDebugTxHash(e.target.value)}
+                    placeholder="Digite o hash da transação"
+                    className="capitare-input flex-1"
+                  />
+                  <button
+                    onClick={handleDebugTransaction}
+                    disabled={isProcessing || !debugTxHash}
+                    className="capitare-btn"
+                  >
+                    Depurar
+                  </button>
                 </div>
-              )}
+              </div>
+              
+              <div>
+                <h4 className="font-medium text-gray-600 mb-2">
+                  Carregar FIDC Existente
+                </h4>
+                <div className="flex gap-2 mb-4">
+                  <input
+                    type="number"
+                    value={fidcIdInput}
+                    onChange={(e) => setFidcIdInput(e.target.value)}
+                    placeholder="Digite o ID do FIDC"
+                    className="capitare-input flex-1"
+                  />
+                  <button
+                    onClick={() => {
+                      if (fidcIdInput) {
+                        onGetFIDC(Number(fidcIdInput));
+                      }
+                    }}
+                    disabled={isProcessing || !fidcIdInput}
+                    className="capitare-btn"
+                  >
+                    Carregar
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
+        </div>
 
-          {/* Initialize FIDC Card */}
+        <div className="grid grid-cols-2 gap-8 mb-12">
           <div className="capitare-card">
             <div className="capitare-icon">
               <svg
@@ -202,7 +309,7 @@ export default function ManagerPage() {
 
             <div className="space-y-4">
               <button
-                onClick={onInitializeFIDC}
+                onClick={handleInitializeFIDC}
                 disabled={isProcessing}
                 className="capitare-btn w-full"
               >
@@ -220,7 +327,6 @@ export default function ManagerPage() {
             </div>
           </div>
 
-          {/* Invest in FIDC Card */}
           <div className="capitare-card">
             <div className="capitare-icon">
               <svg
@@ -255,11 +361,7 @@ export default function ManagerPage() {
               </div>
 
               <button
-                onClick={() => {
-                  if (fidcId && investAmount > 0) {
-                    onInvestFIDC(fidcId, investAmount);
-                  }
-                }}
+                onClick={handleInvestFIDC}
                 disabled={isProcessing || !fidcId}
                 className="capitare-btn w-full"
               >
@@ -267,7 +369,9 @@ export default function ManagerPage() {
               </button>
             </div>
           </div>
+        </div>
 
+        <div className="grid grid-cols-2 gap-8 mb-12">
           <div className="capitare-card">
             <div className="capitare-icon">
               <svg
@@ -304,11 +408,7 @@ export default function ManagerPage() {
               </div>
 
               <button
-                onClick={() => {
-                  if (fidcId && anticipationAmount > 0) {
-                    onAnticipation(fidcId, anticipationAmount);
-                  }
-                }}
+                onClick={handleAnticipation}
                 disabled={isProcessing || !fidcId}
                 className="capitare-btn w-full"
               >
@@ -317,7 +417,6 @@ export default function ManagerPage() {
             </div>
           </div>
 
-          {/* Compensation Card */}
           <div className="capitare-card">
             <div className="capitare-icon">
               <svg
@@ -339,11 +438,7 @@ export default function ManagerPage() {
 
             <div className="space-y-4">
               <button
-                onClick={() => {
-                  if (fidcId) {
-                    onCompensation(fidcId);
-                  }
-                }}
+                onClick={handleCompensation}
                 disabled={isProcessing || !fidcId}
                 className="capitare-btn w-full"
               >
@@ -353,7 +448,9 @@ export default function ManagerPage() {
               </button>
             </div>
           </div>
+        </div>
 
+        <div className="grid grid-cols-1 mb-12">
           <div className="capitare-card">
             <div className="capitare-icon">
               <svg
@@ -375,11 +472,7 @@ export default function ManagerPage() {
 
             <div className="space-y-4">
               <button
-                onClick={() => {
-                  if (fidcId) {
-                    onRedeem(fidcId);
-                  }
-                }}
+                onClick={handleRedeem}
                 disabled={isProcessing || !fidcId}
                 className="capitare-btn w-full"
               >
@@ -389,28 +482,11 @@ export default function ManagerPage() {
           </div>
         </div>
 
-        {/* Transaction and Logs Card */}
         <div className="capitare-card">
-          <div className="capitare-icon">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-6 w-6"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z"
-              />
-            </svg>
-          </div>
           <div className="flex justify-between items-center w-full mb-2">
             <h2 className="capitare-card-title">Transaction Logs</h2>
-            <button
-              onClick={clearLogs}
+            <button 
+              onClick={clearLogs} 
               className="capitare-btn-outline text-sm px-2 py-1"
             >
               Clear Logs
