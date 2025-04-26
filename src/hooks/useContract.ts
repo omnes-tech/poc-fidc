@@ -11,55 +11,132 @@ import {
   Collateral__factory,
 } from "@/contracts";
 import { ethers } from "ethers";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useMemo } from "react";
+import { debounce } from "lodash";
+
+interface ContractState {
+  fidcId: number | null;
+  balances: {
+    stablecoin: string;
+    receivables: string;
+  };
+  transaction: {
+    isProcessing: boolean;
+    error: string | null;
+    hash: string | null;
+  };
+  logs: string[];
+}
 
 export function useContract() {
-  const [fidcId, setFidcId] = useState<number | null>(null);
-  const [stablecoinBalance, setStablecoinBalance] = useState<string>("0");
-  const [receivablesBalance, setReceivablesBalance] = useState<string>("0");
-  const [logs, setLogs] = useState<string[]>([]);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [txHash, setTxHash] = useState<string | null>(null);
+  // Estado combinado
+  const [state, setState] = useState<ContractState>({
+    fidcId: null,
+    balances: {
+      stablecoin: "0",
+      receivables: "0",
+    },
+    transaction: {
+      isProcessing: false,
+      error: null,
+      hash: null,
+    },
+    logs: [],
+  });
 
-  const addLog = useCallback((message: string) => {
-    setLogs((prev) => [
+  // Helpers para atualizar partes específicas do estado
+  const updateState = useCallback((updates: Partial<ContractState>) => {
+    setState((prev) => ({
       ...prev,
-      `${new Date().toLocaleTimeString()}: ${message}`,
-    ]);
+      ...updates,
+    }));
+  }, []);
+
+  const updateBalanceState = useCallback(
+    (updates: Partial<ContractState["balances"]>) => {
+      setState((prev) => ({
+        ...prev,
+        balances: {
+          ...prev.balances,
+          ...updates,
+        },
+      }));
+    },
+    []
+  );
+
+  const updateTransactionState = useCallback(
+    (updates: Partial<ContractState["transaction"]>) => {
+      setState((prev) => ({
+        ...prev,
+        transaction: {
+          ...prev.transaction,
+          ...updates,
+        },
+      }));
+    },
+    []
+  );
+
+  // Função de log otimizada
+  const addLog = useCallback((message: string) => {
+    setState((prev) => ({
+      ...prev,
+      logs: [...prev.logs, `${new Date().toLocaleTimeString()}: ${message}`],
+    }));
   }, []);
 
   const clearLogs = useCallback(() => {
-    setLogs([]);
+    setState((prev) => ({
+      ...prev,
+      logs: [],
+    }));
   }, []);
 
-  const getContracts = useCallback(async () => {
-    const provider = await getProvider();
-    const fidcContract = Fidc__factory.connect(
-      FIDC_Management_address,
-      provider
-    );
-    const drexContract = Erc20__factory.connect(ERC20Mock_address, provider);
-    return { fidcContract, drexContract };
+  // Primeiro, vamos memoizar o provider
+  const memoizedProvider = useMemo(() => {
+    const rpc =
+      "https://eth-holesky.g.alchemy.com/v2/BOpg9p0oZKDhPotFJUvlHPApbI9ttAWO";
+    return new ethers.JsonRpcProvider(rpc);
   }, []);
+
+  // Agora vamos memoizar os contratos usando o provider memoizado
+  const memoizedContracts = useMemo(() => {
+    return {
+      fidcContract: Fidc__factory.connect(
+        FIDC_Management_address,
+        memoizedProvider
+      ),
+      drexContract: Erc20__factory.connect(ERC20Mock_address, memoizedProvider),
+    };
+  }, [memoizedProvider]);
+
+  // Atualizar a função getProvider para usar o provider memoizado
+  const getProvider = useCallback(() => {
+    return memoizedProvider;
+  }, [memoizedProvider]);
 
   const updateBalances = useCallback(async () => {
-    if (!fidcId) return;
+    if (!state.fidcId) return;
 
     try {
       const provider = await getProvider();
-      const { fidcContract, drexContract } = await getContracts();
+      const { fidcContract, drexContract } = await memoizedContracts;
 
       // Atualiza saldo de stablecoin
       const stablecoinBal = await drexContract.balanceOf(
         FIDC_Management_address
       );
-      setStablecoinBalance(ethers.formatEther(stablecoinBal));
+      updateBalanceState({ stablecoin: ethers.formatEther(stablecoinBal) });
       addLog(`Stablecoin balance: ${ethers.formatEther(stablecoinBal)}`);
 
       // Obtém endereço do receivable do FIDC
-      const receivableAddress = await fidcContract.getFIDCReceivable(fidcId);
-      addLog(`Receivable address for FIDC ${fidcId}: ${receivableAddress}`);
+      const receivableAddress = await fidcContract.getFIDCReceivable(
+        state.fidcId
+      );
+      addLog(
+        `Receivable address for FIDC ${state.fidcId}: ${receivableAddress}`
+      );
 
       if (receivableAddress && receivableAddress !== ethers.ZeroAddress) {
         // Conecta ao contrato de receivables usando o provider obtido
@@ -73,7 +150,9 @@ export function useContract() {
           const receivablesBal = await receivableContract.balanceOf(
             FIDC_Management_address
           );
-          setReceivablesBalance(ethers.formatEther(receivablesBal));
+          updateBalanceState({
+            receivables: ethers.formatEther(receivablesBal),
+          });
           addLog(
             `Receivables balance of FIDC: ${ethers.formatEther(receivablesBal)}`
           );
@@ -82,21 +161,29 @@ export function useContract() {
           addLog(`Error getting receivables balance: ${error}`);
         }
       } else {
-        setReceivablesBalance("0");
+        updateBalanceState({ receivables: "0" });
         addLog("No receivable address found for this FIDC");
       }
     } catch (error) {
       console.error("Error updating balances:", error);
       addLog(`Error updating balances: ${error}`);
     }
-  }, [fidcId, getContracts, addLog]);
+  }, [
+    state.fidcId,
+    memoizedContracts,
+    updateBalanceState,
+    addLog,
+    getProvider,
+  ]);
 
-  async function getProvider() {
-    const rpc =
-      "https://eth-holesky.g.alchemy.com/v2/UTe3D7JmoPvgh36ldqaV-7BlAeQ0oCgx";
-    const provider = new ethers.JsonRpcProvider(rpc);
-    return provider;
-  }
+  const debouncedUpdateBalances = useMemo(
+    () =>
+      debounce(async () => {
+        if (!state.fidcId) return;
+        await updateBalances();
+      }, 500),
+    [state.fidcId, updateBalances]
+  );
 
   async function getWallet(type: "pj" | "adqui" | "manager" | "demo") {
     const privateKey =
@@ -119,44 +206,66 @@ export function useContract() {
   ) {
     const events = [];
     if (receipt && receipt.logs) {
-      addLog(`Parsing ${receipt.logs.length} logs from transaction ${receipt.hash}`);
+      addLog(
+        `Parsing ${receipt.logs.length} logs from transaction ${receipt.hash}`
+      );
       for (const log of receipt.logs) {
         try {
           // Log raw log data para depuração
           addLog(`Log address: ${log.address}`);
           addLog(`Log topics: ${JSON.stringify(log.topics)}`);
-          
+
           // Verifica se o log pertence ao nosso contrato
-          if (log.address.toLowerCase() === contractInstance.target.toLowerCase()) {
+          if (
+            log.address.toLowerCase() === contractInstance.target.toLowerCase()
+          ) {
             addLog(`✓ Log pertence ao contrato ${log.address}`);
           } else {
-            addLog(`✗ Log de outro contrato ${log.address} != ${contractInstance.target}`);
+            addLog(
+              `✗ Log de outro contrato ${log.address} != ${contractInstance.target}`
+            );
             // Tente identificar qual contrato emitiu o evento
             try {
               // Código específico apenas para FIDC
-              if (contractInstance.interface.fragments.some((f: any) => f.name === "initializeFIDC")) {
+              if (
+                contractInstance.interface.fragments.some(
+                  (f: any) => f.name === "initializeFIDC"
+                )
+              ) {
                 const fidcInterface = Fidc__factory.createInterface();
                 const parsedFromFidc = fidcInterface.parseLog({
-                  topics: log.topics as string[], 
-                  data: log.data
+                  topics: log.topics as string[],
+                  data: log.data,
                 });
                 if (parsedFromFidc) {
                   addLog(`Evento identificado do FIDC: ${parsedFromFidc.name}`);
-                  events.push({ name: parsedFromFidc.name, args: parsedFromFidc.args });
+                  events.push({
+                    name: parsedFromFidc.name,
+                    args: parsedFromFidc.args,
+                  });
                   continue;
                 }
               }
-              
+
               // Código específico apenas para ERC20
-              if (contractInstance.interface.fragments.some((f: any) => f.name === "transfer")) {
+              if (
+                contractInstance.interface.fragments.some(
+                  (f: any) => f.name === "transfer"
+                )
+              ) {
                 const erc20Interface = Erc20__factory.createInterface();
                 const parsedFromErc20 = erc20Interface.parseLog({
-                  topics: log.topics as string[], 
-                  data: log.data
+                  topics: log.topics as string[],
+                  data: log.data,
                 });
                 if (parsedFromErc20) {
-                  addLog(`Evento identificado do ERC20: ${parsedFromErc20.name}`);
-                  events.push({ name: parsedFromErc20.name, args: parsedFromErc20.args });
+                  addLog(
+                    `Evento identificado do ERC20: ${parsedFromErc20.name}`
+                  );
+                  events.push({
+                    name: parsedFromErc20.name,
+                    args: parsedFromErc20.args,
+                  });
                   continue;
                 }
               }
@@ -164,13 +273,13 @@ export function useContract() {
               // Ignora erro ao tentar parsear com outra interface
             }
           }
-          
+
           // Tenta fazer o parse usando a interface do contrato
           const parsedLog = contractInstance.interface.parseLog({
             topics: log.topics as string[],
             data: log.data,
           });
-          
+
           if (parsedLog) {
             addLog(`✓ Evento parseado com sucesso: ${parsedLog.name}`);
             events.push({ name: parsedLog.name, args: parsedLog.args });
@@ -185,58 +294,70 @@ export function useContract() {
     } else {
       addLog(`⚠️ Nenhum log encontrado no recibo da transação`);
     }
-    
+
     addLog(`Total de eventos encontrados: ${events.length}`);
     return events;
   }
 
   async function onInitializeFIDC() {
     try {
-      setIsProcessing(true);
-      setError(null);
+      updateTransactionState({ isProcessing: true });
+      updateTransactionState({ error: null });
       addLog("Initializing FIDC...");
 
-    const managerWallet = await getWallet("manager");
-    const fidcContract = Fidc__factory.connect(
-      FIDC_Management_address,
-      managerWallet
-    );
-    const fidcConfig = { fee: 100, annual: 1800, grace: 86400, senior: 500 };
+      const managerWallet = await getWallet("manager");
+      const fidcContract = Fidc__factory.connect(
+        FIDC_Management_address,
+        managerWallet
+      );
+      const fidcConfig = { fee: 100, annual: 1800, grace: 35, senior: 500 };
 
       addLog(`Using manager wallet: ${managerWallet.address}`);
       addLog("Sending initializeFIDC transaction...");
 
-    const initializeTx = await fidcContract.initializeFIDC(
-      adminAddresses.manager_address,
-      adminAddresses.pj_address,
-      adminAddresses.adqui_address,
-      fidcConfig.fee,
-      fidcConfig.annual,
-      fidcConfig.grace,
-      fidcConfig.senior
-    );
+      const initializeTx = await fidcContract.initializeFIDC(
+        adminAddresses.manager_address,
+        adminAddresses.pj_address,
+        adminAddresses.adqui_address,
+        fidcConfig.fee,
+        fidcConfig.annual,
+        fidcConfig.grace,
+        fidcConfig.senior
+      );
 
       addLog(`Transaction sent: ${initializeTx.hash}`);
-      setTxHash(initializeTx.hash);
+      updateTransactionState({ hash: initializeTx.hash });
 
       const receipt = await initializeTx.wait();
       addLog("Transaction confirmed!");
 
       const events = await parseEvents(receipt, fidcContract);
-      events.forEach((event) => {
-        addLog(`Event emitted: ${event.name}`);
-      });
 
+      // Procura especificamente pelo evento FIDCCreated
       const fidcCreatedEvent = events.find(
         (event) => event.name === "FIDCCreated"
       );
 
-      const newFidcId = fidcCreatedEvent ? fidcCreatedEvent.args[0] : null;
+      if (fidcCreatedEvent) {
+        const { args } = fidcCreatedEvent;
+        addLog("=== FIDC Created Successfully ===");
+        addLog(`FIDC ID: ${args[0]}`);
+        addLog(`Manager Address: ${args[1]}`);
+        addLog(`Receivable Contract: ${args[2]}`);
+        addLog("============================");
 
-      if (newFidcId) {
-        setFidcId(newFidcId);
-        addLog(`New FIDC created with ID: ${newFidcId}`);
+        // Atualiza o estado com o novo FIDC ID
+        updateState({ fidcId: args[0] });
+      } else {
+        addLog("Warning: FIDCCreated event not found in transaction logs");
       }
+
+      // Registra outros eventos que possam ter ocorrido
+      events
+        .filter((event) => event.name !== "FIDCCreated")
+        .forEach((event) => {
+          addLog(`Additional event emitted: ${event.name}`);
+        });
 
       await updateBalances();
       addLog("FIDC initialization completed successfully");
@@ -244,35 +365,43 @@ export function useContract() {
       return {
         receipt,
         events,
-        fidcId: newFidcId,
+        fidcCreatedEvent: fidcCreatedEvent
+          ? {
+              fidcId: fidcCreatedEvent.args[0],
+              managerAddress: fidcCreatedEvent.args[1],
+              receivableContract: fidcCreatedEvent.args[2],
+            }
+          : null,
       };
     } catch (err: any) {
-      setError(err.message || "Error initializing FIDC");
+      updateTransactionState({
+        error: err.message || "Error initializing FIDC",
+      });
       addLog(`Error: ${err.message || "Unknown error"}`);
       throw err;
     } finally {
-      setIsProcessing(false);
+      updateTransactionState({ isProcessing: false });
     }
   }
 
   async function onInvestFIDC(investFidcId: number, amount: number) {
     try {
-      setIsProcessing(true);
-      setError(null);
+      updateTransactionState({ isProcessing: true });
+      updateTransactionState({ error: null });
       const newAmount = ethers.parseEther(amount.toString());
       addLog(`Investing ${newAmount} tokens in FIDC ID: ${investFidcId}...`);
 
-    const demoWallet = await getWallet("demo");
+      const demoWallet = await getWallet("demo");
       addLog(`Using demo wallet: ${demoWallet.address}`);
 
       const erc20Contract = Erc20__factory.connect(
         ERC20Mock_address,
         demoWallet
       );
-    const fidcContract = Fidc__factory.connect(
-      FIDC_Management_address,
-      demoWallet
-    );
+      const fidcContract = Fidc__factory.connect(
+        FIDC_Management_address,
+        demoWallet
+      );
 
       // Verificar saldo de quotas antes do investimento
       const quotasBeforeInvestment = await fidcContract.balanceOf(
@@ -285,13 +414,13 @@ export function useContract() {
       );
 
       addLog("Sending approve transaction...");
-    const approveTx = await erc20Contract.approve(
-      FIDC_Management_address,
+      const approveTx = await erc20Contract.approve(
+        FIDC_Management_address,
         newAmount
       );
 
       addLog(`Approval transaction sent: ${approveTx.hash}`);
-      setTxHash(approveTx.hash);
+      updateTransactionState({ hash: approveTx.hash });
 
       const approveReceipt = await approveTx.wait();
       addLog("Approval transaction confirmed!");
@@ -312,7 +441,7 @@ export function useContract() {
       const investTx = await fidcContract.invest(investFidcId, newAmount);
 
       addLog(`Investment transaction sent: ${investTx.hash}`);
-      setTxHash(investTx.hash);
+      updateTransactionState({ hash: investTx.hash });
 
       const investReceipt = await investTx.wait();
       addLog("Investment transaction confirmed!");
@@ -350,18 +479,20 @@ export function useContract() {
         quotasMinted: ethers.formatEther(quotasMinted),
       };
     } catch (err: any) {
-      setError(err.message || "Error investing in FIDC");
+      updateTransactionState({
+        error: err.message || "Error investing in FIDC",
+      });
       addLog(`Error: ${err.message || "Unknown error"}`);
       throw err;
     } finally {
-      setIsProcessing(false);
+      updateTransactionState({ isProcessing: false });
     }
   }
 
   async function onAnticipation(anticipationFidcId: number, amount: number) {
     try {
-      setIsProcessing(true);
-      setError(null);
+      updateTransactionState({ isProcessing: true });
+      updateTransactionState({ error: null });
       const requestedAmount = ethers.parseEther(amount.toString());
       const requiredCollateral = (requestedAmount * BigInt(120)) / BigInt(100);
 
@@ -429,7 +560,7 @@ export function useContract() {
       );
 
       addLog(`Transação enviada: ${anticipationTx.hash}`);
-      setTxHash(anticipationTx.hash);
+      updateTransactionState({ hash: anticipationTx.hash });
 
       const receipt = await anticipationTx.wait();
       addLog("Transação confirmada!");
@@ -464,18 +595,20 @@ export function useContract() {
         anticipationEvent,
       };
     } catch (err: any) {
-      setError(err.message || "Erro no processo de antecipação");
+      updateTransactionState({
+        error: err.message || "Erro no processo de antecipação",
+      });
       addLog(`Erro: ${err.message || "Erro desconhecido"}`);
       throw err;
     } finally {
-      setIsProcessing(false);
+      updateTransactionState({ isProcessing: false });
     }
   }
 
   async function onCompensation(compensationFidcId: number) {
     try {
-      setIsProcessing(true);
-      setError(null);
+      updateTransactionState({ isProcessing: true });
+      updateTransactionState({ error: null });
       addLog(
         `Processing compensation payment for FIDC ID: ${compensationFidcId}...`
       );
@@ -557,7 +690,7 @@ export function useContract() {
       );
 
       addLog(`Compensation transaction sent: ${compensationTx.hash}`);
-      setTxHash(compensationTx.hash);
+      updateTransactionState({ hash: compensationTx.hash });
 
       const receipt = await compensationTx.wait();
       addLog("Compensation transaction confirmed!");
@@ -586,27 +719,29 @@ export function useContract() {
 
       return { receipt, events, compensationEvent };
     } catch (err: any) {
-      setError(err.message || "Error processing compensation");
+      updateTransactionState({
+        error: err.message || "Error processing compensation",
+      });
       addLog(`Error: ${err.message || "Unknown error"}`);
       throw err;
     } finally {
-      setIsProcessing(false);
+      updateTransactionState({ isProcessing: false });
     }
   }
 
   async function onRedeem(redeemFidcId: number) {
     try {
-      setIsProcessing(true);
-      setError(null);
+      updateTransactionState({ isProcessing: true });
+      updateTransactionState({ error: null });
       addLog(`Processing redemption for FIDC ID: ${redeemFidcId}...`);
 
-    const managerWallet = await getWallet("manager");
+      const managerWallet = await getWallet("manager");
       addLog(`Using manager wallet: ${managerWallet.address}`);
 
-    const fidcContract = Fidc__factory.connect(
-      FIDC_Management_address,
-      managerWallet
-    );
+      const fidcContract = Fidc__factory.connect(
+        FIDC_Management_address,
+        managerWallet
+      );
 
       addLog("Sending redemption transaction...");
       const redeemTx = await fidcContract.redeemAllManager(redeemFidcId, {
@@ -614,7 +749,7 @@ export function useContract() {
       });
 
       addLog(`Redemption transaction sent: ${redeemTx.hash}`);
-      setTxHash(redeemTx.hash);
+      updateTransactionState({ hash: redeemTx.hash });
 
       const receipt = await redeemTx.wait();
       addLog("Redemption transaction confirmed!");
@@ -664,11 +799,13 @@ export function useContract() {
         redemptionEvents,
       };
     } catch (err: any) {
-      setError(err.message || "Error processing redemption");
+      updateTransactionState({
+        error: err.message || "Error processing redemption",
+      });
       addLog(`Error: ${err.message || "Unknown error"}`);
       throw err;
     } finally {
-      setIsProcessing(false);
+      updateTransactionState({ isProcessing: false });
     }
   }
 
@@ -687,110 +824,179 @@ export function useContract() {
   }
 
   async function onGetFIDC(id: number) {
-    addLog(`Getting FIDC ID: ${id}`);
-    const demoWallet = await getWallet("demo");
-    const fidcContract = Fidc__factory.connect(
-      FIDC_Management_address,
-      demoWallet
-    );
-    const fidc = await fidcContract.fidcs(id);
-    console.log(fidc);
-    if (fidc[7].toString() === "true") {
-      addLog(`FIDC found: ${id}`);
-      console.log(id);
-      setFidcId(Number(id));
-      return fidc;
+    try {
+      addLog(`Verificando FIDC ID: ${id}`);
+      const demoWallet = await getWallet("demo");
+      const fidcContract = Fidc__factory.connect(
+        FIDC_Management_address,
+        demoWallet
+      );
+
+      // Verifica o endereço do receivable
+      const receivableAddress = await fidcContract.getFIDCReceivable(id);
+      addLog(`Endereço do receivable: ${receivableAddress}`);
+
+      if (receivableAddress === ethers.ZeroAddress) {
+        addLog("FIDC não encontrado: endereço do receivable é zero");
+        updateState({ fidcId: null });
+        updateBalanceState({ stablecoin: "0", receivables: "0" });
+        return null;
+      }
+
+      // Primeiro atualiza o FIDC ID
+      updateState({ fidcId: Number(id) });
+
+      // Aguarda um momento para garantir que os valores sejam atualizados corretamente
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      // Busca os saldos em uma única operação
+      const provider = await getProvider();
+      const { drexContract } = await memoizedContracts;
+      const receivableContract = Erc20__factory.connect(
+        receivableAddress,
+        provider
+      );
+
+      const [stablecoinBal, receivablesBal] = await Promise.all([
+        drexContract.balanceOf(FIDC_Management_address),
+        receivableContract.balanceOf(FIDC_Management_address),
+      ]);
+
+      // Atualiza os dois saldos de uma vez
+      updateBalanceState({
+        stablecoin: ethers.formatEther(stablecoinBal),
+        receivables: ethers.formatEther(receivablesBal),
+      });
+
+      // Obtém detalhes adicionais do FIDC
+      const fidc = await fidcContract.fidcs(id);
+
+      return {
+        ...fidc,
+        receivableAddress,
+      };
+    } catch (error: any) {
+      addLog(`Erro ao verificar FIDC: ${error.message}`);
+      updateState({ fidcId: null });
+      updateBalanceState({ stablecoin: "0", receivables: "0" });
+      return null;
     }
-    addLog("FIDC not found");
-    return null;
   }
 
   async function debugTransactionEvents(txHash: string) {
     try {
-      setIsProcessing(true);
+      updateTransactionState({ isProcessing: true });
       addLog(`Depurando transação: ${txHash}`);
-      
+
       const provider = await getProvider();
       addLog(`Obtendo recibo da transação...`);
-      
+
       // Obter o recibo da transação
       const receipt = await provider.getTransactionReceipt(txHash);
       if (!receipt) {
         addLog(`⚠️ Recibo não encontrado para a transação ${txHash}`);
         return;
       }
-      
+
       addLog(`Recibo encontrado. Logs: ${receipt.logs.length}`);
-      
+
       // Obter o código do contrato para descobrir que interface usar
       const contractAddress = receipt.to;
       addLog(`Contrato alvo: ${contractAddress}`);
-      
+
       // Tentar com várias interfaces
       addLog(`Tentando com interface FIDC...`);
-      const fidcContract = Fidc__factory.connect(contractAddress || "", provider);
+      const fidcContract = Fidc__factory.connect(
+        contractAddress || "",
+        provider
+      );
       const fidcEvents = await parseEvents(receipt, fidcContract);
-      
+
       addLog(`Tentando com interface ERC20...`);
-      const erc20Contract = Erc20__factory.connect(contractAddress || "", provider);
+      const erc20Contract = Erc20__factory.connect(
+        contractAddress || "",
+        provider
+      );
       const erc20Events = await parseEvents(receipt, erc20Contract);
-      
+
       addLog(`Tentando com interface Collateral...`);
-      const collateralContract = Collateral__factory.connect(contractAddress || "", provider);
+      const collateralContract = Collateral__factory.connect(
+        contractAddress || "",
+        provider
+      );
       const collateralEvents = await parseEvents(receipt, collateralContract);
-      
+
       // Retornar todos os eventos encontrados
       const allEvents = [
-        ...fidcEvents, 
-        ...erc20Events, 
-        ...collateralEvents
+        ...fidcEvents,
+        ...erc20Events,
+        ...collateralEvents,
       ].filter(
         // Remover duplicatas
-        (event, index, self) => 
-          index === self.findIndex(e => e.name === event.name && JSON.stringify(e.args) === JSON.stringify(event.args))
+        (event, index, self) =>
+          index ===
+          self.findIndex(
+            (e) =>
+              e.name === event.name &&
+              JSON.stringify(e.args) === JSON.stringify(event.args)
+          )
       );
-      
+
       addLog(`Total de eventos únicos encontrados: ${allEvents.length}`);
-      
+
       // Exibir cada evento encontrado
-      allEvents.forEach(event => {
+      allEvents.forEach((event) => {
         addLog(`Evento: ${event.name}`);
-        addLog(`Argumentos: ${JSON.stringify(Object.values(event.args).map(arg => 
-          typeof arg === 'bigint' ? arg.toString() : arg
-        ))}`);
+        addLog(
+          `Argumentos: ${JSON.stringify(
+            Object.values(event.args).map((arg) =>
+              typeof arg === "bigint" ? arg.toString() : arg
+            )
+          )}`
+        );
       });
-      
+
       return { receipt, events: allEvents };
     } catch (err: any) {
-      setError(err.message || "Erro ao depurar transação");
+      updateTransactionState({
+        error: err.message || "Erro ao depurar transação",
+      });
       addLog(`Erro: ${err.message || "Erro desconhecido"}`);
     } finally {
-      setIsProcessing(false);
+      updateTransactionState({ isProcessing: false });
     }
   }
 
+  const memoizedInterfaces = useMemo(
+    () => ({
+      fidcInterface: Fidc__factory.createInterface(),
+      erc20Interface: Erc20__factory.createInterface(),
+    }),
+    []
+  );
+
   useEffect(() => {
-    if (fidcId) updateBalances();
-  }, [fidcId]);
+    if (state.fidcId) updateBalances();
+  }, [state.fidcId, updateBalances]);
 
   return {
-    fidcId,
-    setFidcId,
+    fidcId: state.fidcId,
+    setFidcId: (id: number | null) => updateState({ fidcId: id }),
     onGetFIDC,
-    stablecoinBalance,
-    receivablesBalance,
+    stablecoinBalance: state.balances.stablecoin,
+    receivablesBalance: state.balances.receivables,
     updateBalances,
     onInitializeFIDC,
     onInvestFIDC,
     onAnticipation,
     onCompensation,
     onRedeem,
-    logs,
+    logs: state.logs,
     addLog,
     clearLogs,
-    isProcessing,
-    error,
-    txHash,
+    isProcessing: state.transaction.isProcessing,
+    error: state.transaction.error,
+    txHash: state.transaction.hash,
     debugTransactionEvents,
     onGetAllInvestors,
   };

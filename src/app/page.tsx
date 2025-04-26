@@ -4,6 +4,7 @@ import CapitareHeader from "@/components/CapitareHeader";
 import { useContract } from "@/hooks/useContract";
 import { EventData } from "@/interfaces";
 import { TransactionStatus } from "@/components/TransactionStatus";
+import { toast } from "react-hot-toast";
 
 export default function ManagerPage() {
   const {
@@ -13,13 +14,13 @@ export default function ManagerPage() {
     onCompensation,
     onRedeem,
     updateBalances,
-    fidcId,
+    fidcId: contractFidcId,
+    setFidcId: setContractFidcId,
     stablecoinBalance,
     receivablesBalance,
     logs,
     clearLogs,
     isProcessing,
-    debugTransactionEvents,
     onGetFIDC,
     onGetAllInvestors,
     txHash,
@@ -29,13 +30,11 @@ export default function ManagerPage() {
   const [currentEvents, setCurrentEvents] = useState<EventData[]>([]);
   const [investors, setInvestors] = useState<string[]>([]);
   const [showInvestors, setShowInvestors] = useState<boolean>(false);
-  // Estado para controlar se o popup deve ser aberto forçadamente
   const [forceOpenModal, setForceOpenModal] = useState<boolean>(false);
 
   const [investAmount, setInvestAmount] = useState(1000);
   const [anticipationAmount, setAnticipationAmount] = useState(500);
-  const [debugTxHash, setDebugTxHash] = useState("");
-  const [fidcIdInput, setFidcIdInput] = useState("");
+  const [inputFidcId, setInputFidcId] = useState<string>("");
 
   const handleInitializeFIDC = async () => {
     try {
@@ -50,13 +49,13 @@ export default function ManagerPage() {
   };
 
   const handleInvestFIDC = async () => {
-    if (!fidcId || investAmount <= 0) return;
+    if (!contractFidcId || investAmount <= 0) return;
 
     try {
       setCurrentOperation("Investimento");
       setCurrentEvents([]);
       setShowInvestors(false);
-      const result = await onInvestFIDC(fidcId, investAmount);
+      const result = await onInvestFIDC(contractFidcId, investAmount);
       setCurrentEvents([
         ...(result.approveEvents || []),
         ...(result.investEvents || []),
@@ -67,13 +66,13 @@ export default function ManagerPage() {
   };
 
   const handleAnticipation = async () => {
-    if (!fidcId || anticipationAmount <= 0) return;
+    if (!contractFidcId || anticipationAmount <= 0) return;
 
     try {
       setCurrentOperation("Antecipação");
       setCurrentEvents([]);
       setShowInvestors(false);
-      const result = await onAnticipation(fidcId, anticipationAmount);
+      const result = await onAnticipation(contractFidcId, anticipationAmount);
       setCurrentEvents(result.events || []);
     } catch (error) {
       console.error("Erro na antecipação:", error);
@@ -81,60 +80,67 @@ export default function ManagerPage() {
   };
 
   const handleCompensation = async () => {
-    if (!fidcId) return;
+    if (!contractFidcId) return;
 
     try {
-      setCurrentOperation("Compensação");
+      setCurrentOperation("Pagamento do Adiquirente");
       setCurrentEvents([]);
       setShowInvestors(false);
-      const result = await onCompensation(fidcId);
+      const result = await onCompensation(contractFidcId);
       setCurrentEvents(result.events || []);
     } catch (error) {
-      console.error("Erro na compensação:", error);
+      console.error("Erro no pagamento do adiquirente:", error);
     }
   };
 
   const handleRedeem = async () => {
-    if (!fidcId) return;
+    if (!contractFidcId) return;
 
     try {
-      setCurrentOperation("Resgate");
+      setCurrentOperation("Liquidação");
       setCurrentEvents([]);
       setShowInvestors(false);
-      const result = await onRedeem(fidcId);
+      const result = await onRedeem(contractFidcId);
       setCurrentEvents(result.events || []);
     } catch (error) {
-      console.error("Erro no resgate:", error);
+      console.error("Erro no liquidação:", error);
     }
   };
 
-  const handleDebugTransaction = async () => {
-    if (!debugTxHash) return;
+  const handleLoadFidc = async () => {
+    if (!inputFidcId) return;
 
     try {
-      setCurrentOperation("Depuração de Transação");
+      setCurrentOperation("Verificação de FIDC");
       setCurrentEvents([]);
-      setShowInvestors(false);
-      const result = await debugTransactionEvents(debugTxHash);
-      if (result && result.events) {
-        setCurrentEvents(result.events || []);
+      const fidcIdNumber = Number(inputFidcId);
+
+      const result = await onGetFIDC(fidcIdNumber);
+
+      if (!result) {
+        toast.error(`FIDC ${fidcIdNumber} não encontrado ou não existe`);
+        setInputFidcId("");
+      } else {
+        toast.success(`FIDC ${fidcIdNumber} carregado com sucesso`);
+        setContractFidcId(fidcIdNumber);
       }
     } catch (error) {
-      console.error("Erro ao depurar transação:", error);
+      console.error("Erro ao carregar FIDC:", error);
+      toast.error("Erro ao carregar FIDC");
+      setInputFidcId("");
     }
   };
 
   const handleGetAllInvestors = async () => {
-    if (!fidcId) return;
+    if (!contractFidcId) return;
 
     try {
       setCurrentOperation("Lista de Investidores");
       setCurrentEvents([]);
       setShowInvestors(true);
-      // Força a abertura do modal
       setForceOpenModal(true);
 
-      const result = await onGetAllInvestors(fidcId);
+      const result = await onGetAllInvestors(contractFidcId);
       if (result && result.investors) {
         setInvestors(result.investors);
       } else {
@@ -161,7 +167,6 @@ export default function ManagerPage() {
           Capitare.
         </p>
 
-        {/* Um único componente de status para todas as transações */}
         <TransactionStatus
           hash={txHash}
           isProcessing={isProcessing}
@@ -177,7 +182,7 @@ export default function ManagerPage() {
             <div className="flex flex-col md:flex-row justify-between items-center gap-4">
               <div className="flex-1">
                 <h3 className="text-lg font-semibold text-gray-700 mb-2 flex items-center justify-between w-full">
-                  Available Balances - FIDC ID: {fidcId || "N/A"}{" "}
+                  Available Balances - FIDC ID: {contractFidcId || "N/A"}{" "}
                   <button
                     onClick={updateBalances}
                     className="capitare-btn-outline px-4 py-2 flex items-center gap-2"
@@ -269,56 +274,35 @@ export default function ManagerPage() {
         <div className="mb-8">
           <div className="capitare-card">
             <h3 className="text-lg font-semibold text-gray-700 mb-2">
-              Debug Tools
+              Carregar FIDC Existente
             </h3>
-            <div className="grid grid-cols-2 gap-6">
-              <div>
-                <h4 className="font-medium text-gray-600 mb-2">
-                  Depurar Transação
-                </h4>
-                <div className="flex gap-2 mb-4">
-                  <input
-                    type="text"
-                    value={debugTxHash}
-                    onChange={(e) => setDebugTxHash(e.target.value)}
-                    placeholder="Digite o hash da transação"
-                    className="capitare-input flex-1"
-                  />
-                  <button
-                    onClick={handleDebugTransaction}
-                    disabled={isProcessing || !debugTxHash}
-                    className="capitare-btn"
-                  >
-                    Depurar
-                  </button>
-                </div>
+            <div className="flex flex-col gap-2">
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  value={inputFidcId}
+                  onChange={(e) => setInputFidcId(e.target.value)}
+                  placeholder="Digite o ID do FIDC"
+                  className="capitare-input flex-1"
+                />
+                <button
+                  onClick={handleLoadFidc}
+                  disabled={isProcessing || !inputFidcId}
+                  className="capitare-btn"
+                >
+                  {isProcessing ? "Verificando..." : "Carregar"}
+                </button>
               </div>
 
-              <div>
-                <h4 className="font-medium text-gray-600 mb-2">
-                  Carregar FIDC Existente
-                </h4>
-                <div className="flex gap-2 mb-4">
-                  <input
-                    type="number"
-                    value={fidcIdInput}
-                    onChange={(e) => setFidcIdInput(e.target.value)}
-                    placeholder="Digite o ID do FIDC"
-                    className="capitare-input flex-1"
-                  />
-                  <button
-                    onClick={() => {
-                      if (fidcIdInput) {
-                        onGetFIDC(Number(fidcIdInput));
-                      }
-                    }}
-                    disabled={isProcessing || !fidcIdInput}
-                    className="capitare-btn"
-                  >
-                    Carregar
-                  </button>
+              {contractFidcId !== null ? (
+                <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded text-green-700">
+                  FIDC ID atual: {contractFidcId}
                 </div>
-              </div>
+              ) : (
+                <div className="mt-2 text-sm text-gray-500 italic">
+                  Nenhum FIDC carregado
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -346,7 +330,7 @@ export default function ManagerPage() {
             <div className="space-y-4">
               <button
                 onClick={handleGetAllInvestors}
-                disabled={isProcessing || !fidcId}
+                disabled={isProcessing || !contractFidcId}
                 className="capitare-btn w-full"
               >
                 {isProcessing ? "Processing..." : "Get All Investors"}
@@ -384,11 +368,11 @@ export default function ManagerPage() {
                 {isProcessing ? "Processing..." : "Initialize New FIDC"}
               </button>
 
-              {fidcId && (
+              {contractFidcId && (
                 <div className="bg-green-50 border-l-4 border-green-400 p-3 mt-3">
                   <p className="text-sm text-green-700">
                     <span className="font-semibold">FIDC Active</span> - ID:{" "}
-                    {fidcId}
+                    {contractFidcId}
                   </p>
                 </div>
               )}
@@ -430,7 +414,7 @@ export default function ManagerPage() {
 
               <button
                 onClick={handleInvestFIDC}
-                disabled={isProcessing || !fidcId}
+                disabled={isProcessing || !contractFidcId}
                 className="capitare-btn w-full"
               >
                 {isProcessing ? "Processing..." : "Invest in FIDC"}
@@ -457,12 +441,14 @@ export default function ManagerPage() {
                 />
               </svg>
             </div>
-            <h2 className="capitare-card-title">Anticipation</h2>
+            <h2 className="capitare-card-title">
+              Request advance payment in stablecoin
+            </h2>
 
             <div className="space-y-4">
               <div>
                 <label className="capitare-input-label">
-                  Anticipation Amount
+                  Stablecoin Advance Value
                 </label>
                 <input
                   type="number"
@@ -477,10 +463,12 @@ export default function ManagerPage() {
 
               <button
                 onClick={handleAnticipation}
-                disabled={isProcessing || !fidcId}
+                disabled={isProcessing || !contractFidcId}
                 className="capitare-btn w-full"
               >
-                {isProcessing ? "Processing..." : "Liquidation"}
+                {isProcessing
+                  ? "Processing..."
+                  : "Get your advance now! Just leave your collateral"}
               </button>
             </div>
           </div>
@@ -502,17 +490,15 @@ export default function ManagerPage() {
                 />
               </svg>
             </div>
-            <h2 className="capitare-card-title">Compensation Payment</h2>
+            <h2 className="capitare-card-title">Purchaser Payment</h2>
 
             <div className="space-y-4">
               <button
                 onClick={handleCompensation}
-                disabled={isProcessing || !fidcId}
+                disabled={isProcessing || !contractFidcId}
                 className="capitare-btn w-full"
               >
-                {isProcessing
-                  ? "Processing..."
-                  : "Process Compensation Payment"}
+                {isProcessing ? "Processing..." : "Process Purchaser Payment"}
               </button>
             </div>
           </div>
@@ -536,15 +522,18 @@ export default function ManagerPage() {
                 />
               </svg>
             </div>
-            <h2 className="capitare-card-title">Redeem</h2>
+            <h2 className="capitare-card-title">
+              Liquidation of investments - Only manager and investments within
+              the grace period
+            </h2>
 
             <div className="space-y-4">
               <button
                 onClick={handleRedeem}
-                disabled={isProcessing || !fidcId}
+                disabled={isProcessing || !contractFidcId}
                 className="capitare-btn w-full"
               >
-                {isProcessing ? "Processing..." : "Process Redemption"}
+                {isProcessing ? "Processing..." : "Liquidate all"}
               </button>
             </div>
           </div>
