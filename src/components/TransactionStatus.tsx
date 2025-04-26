@@ -33,16 +33,16 @@ function formatEventValue(value: any): string {
 // Função auxiliar para converter objetos BigInt em strings para exibição
 function convertBigIntToString(obj: any): any {
   if (obj === null || obj === undefined) return obj;
-  
-  if (typeof obj === 'bigint') {
+
+  if (typeof obj === "bigint") {
     return obj.toString();
   }
-  
+
   if (Array.isArray(obj)) {
-    return obj.map(item => convertBigIntToString(item));
+    return obj.map((item) => convertBigIntToString(item));
   }
-  
-  if (typeof obj === 'object') {
+
+  if (typeof obj === "object") {
     const result: Record<string, any> = {};
     for (const key in obj) {
       if (Object.prototype.hasOwnProperty.call(obj, key)) {
@@ -51,7 +51,7 @@ function convertBigIntToString(obj: any): any {
     }
     return result;
   }
-  
+
   return obj;
 }
 
@@ -62,15 +62,17 @@ function getEventDisplayValue(event: EventData): string {
   // Buscar valores relevantes com base no tipo de evento
   switch (event.name) {
     case "FIDCCreated":
-      return `FIDC ID: ${event.args[0]}`;
+      return `FIDC ID: ${event.args[0]} | Manager: ${event.args[1].slice(
+        0,
+        6
+      )}...${event.args[1].slice(-4)} | Receivable: ${event.args[2].slice(
+        0,
+        6
+      )}...${event.args[2].slice(-4)}`;
     case "Investment":
-      try {
-        return `Valor: ${ethers.formatEther(event.args[1] || "0")} ETH`;
-      } catch (e) {
-        return `Valor: ${event.args[1] || "0"}`;
-      }
+      return `Amount: ${ethers.formatEther(event.args[1] || "0")} Stablecoin`;
     case "QuotasMinted":
-      return `Quotas: ${event.args[1]}`;
+      return `Quotas: ${ethers.formatEther(event.args[1] || "0")}`;
     case "Approval":
       try {
         return `Valor: ${ethers.formatEther(event.args[2] || "0")} tokens`;
@@ -84,48 +86,352 @@ function getEventDisplayValue(event: EventData): string {
         return `Valor: ${event.args[2] || "0"}`;
       }
     case "Anticipation":
-      try {
-        return `Valor: ${ethers.formatEther(event.args[2] || "0")} tokens`;
-      } catch (e) {
-        return `Valor: ${event.args[2] || "0"}`;
-      }
+      return `FIDC ID: ${event.args[0]} | PJ: ${event.args[1].slice(
+        0,
+        6
+      )}...${event.args[1].slice(-4)} | Amount: ${ethers.formatEther(
+        event.args[2]
+      )} Stablecoin | Collateral: ${ethers.formatEther(event.args[4])}`;
     case "CompensationProcessed":
-      try {
-        return `Valor: ${ethers.formatEther(event.args[2] || "0")} tokens`;
-      } catch (e) {
-        return `Valor: ${event.args[2] || "0"}`;
-      }
+      return `FIDC ID: ${event.args[0]} | Adquirente: ${event.args[1].slice(
+        0,
+        6
+      )}...${event.args[1].slice(-4)} | Amount: ${ethers.formatEther(
+        event.args[2]
+      )} Stablecoin`;
     case "FIDCRedemption":
-      try {
-        return `Valor: ${ethers.formatEther(
-          event.args[2] || "0"
-        )} tokens (Rendimento: ${ethers.formatEther(
-          event.args[4] || "0"
-        )} tokens)`;
-      } catch (e) {
-        return `Valor: ${event.args[2] || "0"} (Rendimento: ${event.args[4] || "0"})`;
-      }
+      const investmentDate = new Date(
+        Number(event.args[8]) * 1000
+      ).toLocaleString();
+      const redemptionDate = new Date(
+        Number(event.args[9]) * 1000
+      ).toLocaleString();
+      return `FIDC ID: ${event.args[0]} | Investor: ${event.args[1].slice(
+        0,
+        6
+      )}...${event.args[1].slice(-4)} | Amount: ${ethers.formatEther(
+        event.args[2]
+      )} | Net Yield: ${ethers.formatEther(event.args[4])}`;
+    case "NewInvestmentRegistered":
+      return `Investor: ${event.args[0].slice(0, 6)}...${event.args[0].slice(
+        -4
+      )} | FIDC ID: ${event.args[1]} | Investment Amount: ${ethers.formatEther(
+        event.args[3]
+      )} Stablecoin`;
     default:
       // Para eventos desconhecidos, mostrar primeiro argumento não numérico
       const entries = Object.entries(event.args);
       const normalEntries = entries.filter(([key]) => isNaN(Number(key)));
-      
+
       for (const [key, value] of normalEntries) {
-        if (value && typeof value !== 'object') {
+        if (value && typeof value !== "object") {
           return `${key}: ${value.toString()}`;
         }
       }
-      
+
       // Se não encontrar um valor simples, mostrar o primeiro argumento disponível
       if (entries.length > 0) {
         const [index, value] = entries[0];
-        if (typeof value === 'object') {
+        if (typeof value === "object") {
           return "Objeto complexo (expandir para ver)";
         }
         return `${index}: ${value?.toString() || ""}`;
       }
-      
+
       return "Detalhes disponíveis ao expandir";
+  }
+}
+
+function EventDetails({ event }: { event: EventData }) {
+  switch (event.name) {
+    case "FIDCCreated":
+      return (
+        <div className="bg-blue-50 p-4 rounded-lg space-y-2">
+          <div className="font-medium text-blue-800 mb-3">
+            FIDC Created Details:
+          </div>
+          <div className="grid grid-cols-1 gap-3">
+            <div className="flex flex-col">
+              <span className="text-sm text-gray-600">FIDC ID:</span>
+              <span className="font-mono text-blue-700 bg-blue-50 px-2 py-1 rounded">
+                {event.args[0].toString()}
+              </span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-sm text-gray-600">Manager Address:</span>
+              <a
+                href={`https://holesky.etherscan.io/address/${event.args[1]}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-mono text-blue-600 hover:text-blue-800 bg-blue-50 px-2 py-1 rounded truncate"
+              >
+                {event.args[1]}
+              </a>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-sm text-gray-600">
+                Receivable Contract:
+              </span>
+              <a
+                href={`https://holesky.etherscan.io/address/${event.args[2]}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-mono text-blue-600 hover:text-blue-800 bg-blue-50 px-2 py-1 rounded truncate"
+              >
+                {event.args[2]}
+              </a>
+            </div>
+          </div>
+        </div>
+      );
+
+    case "NewInvestmentRegistered":
+      return (
+        <div className="bg-green-50 p-4 rounded-lg space-y-2">
+          <div className="font-medium text-green-800 mb-3">
+            Investment Details:
+          </div>
+          <div className="grid grid-cols-1 gap-3">
+            <div className="flex flex-col">
+              <span className="text-sm text-gray-600">Investor Address:</span>
+              <a
+                href={`https://holesky.etherscan.io/address/${event.args[0]}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-mono text-blue-600 hover:text-blue-800 bg-blue-50 px-2 py-1 rounded truncate"
+              >
+                {event.args[0]}
+              </a>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-sm text-gray-600">FIDC ID:</span>
+              <span className="font-mono text-green-700 bg-green-50 px-2 py-1 rounded">
+                {event.args[1].toString()}
+              </span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-sm text-gray-600">
+                Investment Position ID:
+              </span>
+              <span className="font-mono text-green-700 bg-green-50 px-2 py-1 rounded">
+                {event.args[2].toString()}
+              </span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-sm text-gray-600">Investment Amount:</span>
+              <span className="font-mono text-green-700 bg-green-50 px-2 py-1 rounded">
+                {ethers.formatEther(event.args[3])} Stablecoin
+              </span>
+            </div>
+          </div>
+        </div>
+      );
+
+    case "Anticipation":
+      return (
+        <div className="bg-purple-50 p-4 rounded-lg space-y-2">
+          <div className="font-medium text-purple-800 mb-3">
+            Anticipation Details:
+          </div>
+          <div className="grid grid-cols-1 gap-3">
+            <div className="flex flex-col">
+              <span className="text-sm text-gray-600">FIDC ID:</span>
+              <span className="font-mono text-purple-700 bg-purple-50 px-2 py-1 rounded">
+                {event.args[0].toString()}
+              </span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-sm text-gray-600">PJ Address:</span>
+              <a
+                href={`https://holesky.etherscan.io/address/${event.args[1]}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-mono text-blue-600 hover:text-blue-800 bg-blue-50 px-2 py-1 rounded truncate"
+              >
+                {event.args[1]}
+              </a>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-sm text-gray-600">Requested Amount:</span>
+              <span className="font-mono text-purple-700 bg-purple-50 px-2 py-1 rounded">
+                {ethers.formatEther(event.args[2])} Stablecoin
+              </span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-sm text-gray-600">
+                Collateral Contract:
+              </span>
+              <a
+                href={`https://holesky.etherscan.io/address/${event.args[3]}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-mono text-blue-600 hover:text-blue-800 bg-blue-50 px-2 py-1 rounded truncate"
+              >
+                {event.args[3]}
+              </a>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-sm text-gray-600">Collateral Amount:</span>
+              <span className="font-mono text-purple-700 bg-purple-50 px-2 py-1 rounded">
+                {ethers.formatEther(event.args[4])} Collateral
+              </span>
+            </div>
+          </div>
+        </div>
+      );
+
+    case "CompensationProcessed":
+      return (
+        <div className="bg-orange-50 p-4 rounded-lg space-y-2">
+          <div className="font-medium text-orange-800 mb-3">
+            Compensation Payment Details:
+          </div>
+          <div className="grid grid-cols-1 gap-3">
+            <div className="flex flex-col">
+              <span className="text-sm text-gray-600">FIDC ID:</span>
+              <span className="font-mono text-orange-700 bg-orange-50 px-2 py-1 rounded">
+                {event.args[0].toString()}
+              </span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-sm text-gray-600">Adquirente Address:</span>
+              <a
+                href={`https://holesky.etherscan.io/address/${event.args[1]}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-mono text-blue-600 hover:text-blue-800 bg-blue-50 px-2 py-1 rounded truncate"
+              >
+                {event.args[1]}
+              </a>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-sm text-gray-600">
+                Compensation and burn Collateral Amount:
+              </span>
+              <span className="font-mono text-orange-700 bg-orange-50 px-2 py-1 rounded">
+                {ethers.formatEther(event.args[2])} Stablecoin
+              </span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-sm text-gray-600">FIDC Vault:</span>
+              <a
+                href={`https://holesky.etherscan.io/address/${event.args[3]}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-mono text-blue-600 hover:text-blue-800 bg-blue-50 px-2 py-1 rounded truncate"
+              >
+                {event.args[3]}
+              </a>
+            </div>
+          </div>
+        </div>
+      );
+
+    case "FIDCRedemption":
+      return (
+        <div className="bg-red-50 p-4 rounded-lg space-y-2">
+          <div className="font-medium text-red-800 mb-3">
+            Redemption Details:
+          </div>
+          <div className="grid grid-cols-1 gap-3">
+            <div className="flex flex-col">
+              <span className="text-sm text-gray-600">FIDC ID:</span>
+              <span className="font-mono text-red-700 bg-red-50 px-2 py-1 rounded">
+                {event.args[0].toString()}
+              </span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-sm text-gray-600">Investor Address:</span>
+              <a
+                href={`https://holesky.etherscan.io/address/${event.args[1]}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-mono text-blue-600 hover:text-blue-800 bg-blue-50 px-2 py-1 rounded truncate"
+              >
+                {event.args[1]}
+              </a>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-sm text-gray-600">Investment Amount:</span>
+              <span className="font-mono text-red-700 bg-red-50 px-2 py-1 rounded">
+                {ethers.formatEther(event.args[2])} Stablecoin
+              </span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-sm text-gray-600">
+                Gross Yield (Including Fee):
+              </span>
+              <span className="font-mono text-red-700 bg-red-50 px-2 py-1 rounded">
+                {ethers.formatEther(event.args[3])} Stablecoin
+              </span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-sm text-gray-600">
+                Net Yield (For Investor):
+              </span>
+              <span className="font-mono text-red-700 bg-red-50 px-2 py-1 rounded">
+                {ethers.formatEther(event.args[4])} Stablecoin
+              </span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-sm text-gray-600">Manager Fee:</span>
+              <span className="font-mono text-red-700 bg-red-50 px-2 py-1 rounded">
+                {ethers.formatEther(event.args[5])} Stablecoin
+              </span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-sm text-gray-600">Quotas Burned:</span>
+              <span className="font-mono text-red-700 bg-red-50 px-2 py-1 rounded">
+                {ethers.formatEther(event.args[6])} Quotas
+              </span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-sm text-gray-600">Senior Investor:</span>
+              <span className="font-mono text-red-700 bg-red-50 px-2 py-1 rounded">
+                {event.args[7] ? "Yes" : "No"}
+              </span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-sm text-gray-600">Investment Date:</span>
+              <span className="font-mono text-red-700 bg-red-50 px-2 py-1 rounded">
+                {new Date(Number(event.args[8]) * 1000).toLocaleString()}
+              </span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-sm text-gray-600">Redemption Date:</span>
+              <span className="font-mono text-red-700 bg-red-50 px-2 py-1 rounded">
+                {new Date(Number(event.args[9]) * 1000).toLocaleString()}
+              </span>
+            </div>
+          </div>
+        </div>
+      );
+
+    default:
+      return (
+        <div className="grid grid-cols-1 gap-2">
+          <div className="bg-slate-700 p-2 rounded mb-3 text-xs text-white">
+            Event Arguments:
+          </div>
+          {Object.entries(event.args || {}).map(([key, value]) => (
+            <div
+              key={key}
+              className="flex flex-col sm:flex-row sm:items-center py-2 border-b border-gray-100"
+            >
+              <span className="font-mono text-sm text-gray-500 sm:w-1/3 mb-1 sm:mb-0">
+                {key}:
+              </span>
+              <span className="font-mono text-sm text-gray-700 break-all bg-gray-50 p-2 rounded">
+                {typeof value === "bigint"
+                  ? formatEventValue(value)
+                  : typeof value === "object"
+                  ? JSON.stringify(convertBigIntToString(value))
+                  : String(value)}
+              </span>
+            </div>
+          ))}
+        </div>
+      );
   }
 }
 
@@ -137,6 +443,7 @@ export function TransactionStatus({
   investors = [],
   forceOpen = false,
   onModalClose,
+  fidcId,
 }: {
   hash: string | null;
   isProcessing: boolean;
@@ -145,6 +452,7 @@ export function TransactionStatus({
   investors?: string[];
   forceOpen?: boolean;
   onModalClose?: () => void;
+  fidcId?: number;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [expandedEvent, setExpandedEvent] = useState<number | null>(null);
@@ -160,7 +468,10 @@ export function TransactionStatus({
   const processedEvents = events || [];
 
   // Debug para ajudar a verificar a estrutura dos eventos
-  console.log("Eventos recebidos:", JSON.stringify(convertBigIntToString(processedEvents)));
+  console.log(
+    "Eventos recebidos:",
+    JSON.stringify(convertBigIntToString(processedEvents))
+  );
 
   if (!hash && !isProcessing && !investors.length) return null;
 
@@ -236,53 +547,28 @@ export function TransactionStatus({
                 </div>
               )}
 
-              {hash && (
-                <div className="mb-6">
-                  <h4 className="font-medium text-gray-700 mb-2">
-                    Hash da Transação:
-                  </h4>
-                  <a
-                    href={etherscanUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-600 hover:text-blue-800 hover:underline text-sm break-all p-3 bg-blue-50 rounded flex items-center"
-                  >
-                    <span className="flex-grow">{hash}</span>
-                    <svg
-                      className="w-5 h-5 ml-2 flex-shrink-0"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
-                      />
-                    </svg>
-                  </a>
-                </div>
-              )}
-
               {/* Exibição de investidores */}
-              {!isProcessing && investors && investors.length > 0 && (
+              {!isProcessing && operation === "Lista de Investidores" && (
                 <div>
                   <h4 className="font-medium text-gray-700 mb-4">
-                    Investidores do FIDC ({investors.length}):
+                    Investidores do FIDC {fidcId}:
                   </h4>
                   <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                    {investors.length === 0 ? (
-                      <p className="text-gray-500 italic">Nenhum investidor encontrado</p>
+                    {!investors || investors.length === 0 ? (
+                      <p className="text-gray-500 italic">
+                        Nenhum investidor encontrado para o FIDC {fidcId}
+                      </p>
                     ) : (
                       <div className="space-y-2">
                         {investors.map((investor, index) => (
-                          <div key={index} className="flex items-center py-2 border-b border-gray-200">
+                          <div
+                            key={index}
+                            className="flex items-center py-2 border-b border-gray-200"
+                          >
                             <div className="bg-blue-100 text-blue-800 font-bold rounded-full w-8 h-8 flex items-center justify-center mr-3">
                               {index + 1}
                             </div>
-                            <a 
+                            <a
                               href={`https://holesky.etherscan.io/address/${investor}`}
                               target="_blank"
                               rel="noopener noreferrer"
@@ -298,149 +584,133 @@ export function TransactionStatus({
                 </div>
               )}
 
-              {!isProcessing && processedEvents.length > 0 && (
-                <div>
-                  <h4 className="font-medium text-gray-700 mb-2">
-                    Eventos Emitidos ({processedEvents.length}):
-                  </h4>
-                  <div className="space-y-3">
-                    {processedEvents.map((event, index) => (
-                      <div
-                        key={index}
-                        className={`border ${
-                          expandedEvent === index
-                            ? "border-blue-300 bg-blue-50"
-                            : "border-gray-200"
-                        } rounded-lg overflow-hidden`}
+              {/* Exibição de eventos de transação */}
+              {!isProcessing && operation !== "Lista de Investidores" && (
+                <>
+                  {hash && (
+                    <div className="mb-6">
+                      <h4 className="font-medium text-gray-700 mb-2">
+                        Hash da Transação:
+                      </h4>
+                      <a
+                        href={`https://holesky.etherscan.io/tx/${hash}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:text-blue-800 hover:underline text-sm break-all p-3 bg-blue-50 rounded flex items-center"
                       >
-                        <div
-                          className={`p-3 cursor-pointer flex items-center justify-between ${
-                            expandedEvent === index
-                              ? "bg-blue-100"
-                              : "bg-gray-50 hover:bg-gray-100"
-                          }`}
-                          onClick={() =>
-                            setExpandedEvent(
-                              expandedEvent === index ? null : index
-                            )
-                          }
+                        <span className="flex-grow">{hash}</span>
+                        <svg
+                          className="w-5 h-5 ml-2 flex-shrink-0"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
                         >
-                          <div className="flex flex-col sm:flex-row sm:items-center w-full">
-                            <span className="font-medium text-gray-800 sm:mr-4 mb-1 sm:mb-0 sm:w-1/3">
-                              {event.name}
-                            </span>
-                            <span className="text-gray-600 text-sm sm:w-2/3">
-                              {getEventDisplayValue(event)}
-                            </span>
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                          />
+                        </svg>
+                      </a>
+                    </div>
+                  )}
+
+                  {processedEvents.length > 0 && (
+                    <div>
+                      <h4 className="font-medium text-gray-700 mb-2">
+                        Eventos Emitidos ({processedEvents.length}):
+                      </h4>
+                      <div className="space-y-3">
+                        {processedEvents.map((event, index) => (
+                          <div
+                            key={index}
+                            className={`border ${
+                              expandedEvent === index
+                                ? "border-blue-300 bg-blue-50"
+                                : "border-gray-200"
+                            } rounded-lg overflow-hidden`}
+                          >
+                            <div
+                              className={`p-3 cursor-pointer flex items-center justify-between ${
+                                expandedEvent === index
+                                  ? "bg-blue-100"
+                                  : "bg-gray-50 hover:bg-gray-100"
+                              }`}
+                              onClick={() =>
+                                setExpandedEvent(
+                                  expandedEvent === index ? null : index
+                                )
+                              }
+                            >
+                              <div className="flex flex-col sm:flex-row sm:items-center w-full">
+                                <span className="font-medium text-gray-800 sm:mr-4 mb-1 sm:mb-0 sm:w-1/3">
+                                  {event.name}
+                                </span>
+                                <span className="text-gray-600 text-sm sm:w-2/3">
+                                  {getEventDisplayValue(event)}
+                                </span>
+                              </div>
+                              <svg
+                                className={`w-5 h-5 text-gray-600 transform transition-transform flex-shrink-0 ml-2 ${
+                                  expandedEvent === index ? "rotate-180" : ""
+                                }`}
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M19 9l-7 7-7-7"
+                                />
+                              </svg>
+                            </div>
+
+                            {expandedEvent === index && (
+                              <div className="p-4 border-t border-gray-200">
+                                <EventDetails event={event} />
+                              </div>
+                            )}
                           </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {processedEvents.length === 0 && (
+                    <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4">
+                      <div className="flex">
+                        <div className="flex-shrink-0">
                           <svg
-                            className={`w-5 h-5 text-gray-600 transform transition-transform flex-shrink-0 ml-2 ${
-                              expandedEvent === index ? "rotate-180" : ""
-                            }`}
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
+                            className="h-5 w-5 text-yellow-400"
+                            viewBox="0 0 20 20"
+                            fill="currentColor"
                           >
                             <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M19 9l-7 7-7-7"
+                              fillRule="evenodd"
+                              d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                              clipRule="evenodd"
                             />
                           </svg>
                         </div>
-
-                        {expandedEvent === index && (
-                          <div className="p-4 border-t border-gray-200">
-                            <div className="grid grid-cols-1 gap-2">
-                              <div className="bg-slate-700 p-2 rounded mb-3 text-xs">
-                                Todos os argumentos do evento:
-                              </div>
-                              
-                              {Object.entries(event.args || {})
-                                .filter(([key]) => !isNaN(Number(key)))
-                                .map(([key, value]) => (
-                                  <div
-                                    key={`num-${key}`}
-                                    className="flex flex-col sm:flex-row sm:items-center py-2 border-b border-gray-100"
-                                  >
-                                    <span className="font-mono text-sm text-gray-500 mb-1 sm:mb-0">
-                                      Arg[{key}]:
-                                    </span>
-                                    <span className="font-mono text-sm text-gray-500 break-all w-full bg-gray-50 p-1 rounded">
-                                      {typeof value === "bigint" 
-                                        ? formatEventValue(value)
-                                        : typeof value === "object"
-                                          ? JSON.stringify(convertBigIntToString(value))
-                                          : String(value)}
-                                    </span>
-                                  </div>
-                                ))}
-                              
-                              {Object.entries(event.args || {})
-                                .filter(([key]) => isNaN(Number(key)))
-                                .map(([key, value]) => (
-                                  <div
-                                    key={`named-${key}`}
-                                    className="flex flex-col sm:flex-row sm:items-center py-2 border-b border-gray-100"
-                                  >
-                                    <span className="font-mono text-sm text-gray-500 sm:w-1/3 mb-1 sm:mb-0">
-                                      {key}:
-                                    </span>
-                                    <span className="font-mono text-sm text-gray-500 break-all w-full bg-gray-50 p-1 rounded">
-                                      {typeof value === "bigint"
-                                        ? formatEventValue(value)
-                                        : typeof value === "object"
-                                          ? JSON.stringify(convertBigIntToString(value))
-                                          : String(value)}
-                                    </span>
-                                  </div>
-                                ))}
-                              
-                              {Object.keys(event.args || {}).length === 0 && (
-                                <div className="text-gray-500 italic">
-                                  Este evento não tem argumentos
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )}
+                        <div className="ml-3">
+                          <p className="text-sm text-yellow-700">
+                            Nenhum evento detectado nesta transação.
+                          </p>
+                        </div>
                       </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {!isProcessing && !investors.length && (!processedEvents || processedEvents.length === 0) && hash && (
-                <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4">
-                  <div className="flex">
-                    <div className="flex-shrink-0">
-                      <svg
-                        className="h-5 w-5 text-yellow-400"
-                        viewBox="0 0 20 20"
-                        fill="currentColor"
-                      >
-                        <path
-                          fillRule="evenodd"
-                          d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
-                          clipRule="evenodd"
-                        />
-                      </svg>
                     </div>
-                    <div className="ml-3">
-                      <p className="text-sm text-yellow-700">
-                        Nenhum evento detectado nesta transação.
-                      </p>
-                    </div>
-                  </div>
-                </div>
+                  )}
+                </>
               )}
             </div>
 
             <div className="bg-gray-50 px-4 py-3 flex justify-end">
-              {hash && (
+              {hash && operation !== "Lista de Investidores" && (
                 <a
-                  href={etherscanUrl}
+                  href={`https://holesky.etherscan.io/tx/${hash}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm leading-5 font-medium rounded-md text-gray-700 bg-white hover:text-gray-500 focus:outline-none focus:border-blue-300 focus:shadow-outline-blue active:text-gray-800 active:bg-gray-50 transition ease-in-out duration-150 mr-3"

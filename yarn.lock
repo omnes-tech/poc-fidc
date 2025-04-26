@@ -1684,15 +1684,10 @@
   dependencies:
     glob "10.3.10"
 
-"@next/swc-linux-x64-gnu@14.1.4":
+"@next/swc-win32-x64-msvc@14.1.4":
   version "14.1.4"
-  resolved "https://registry.npmjs.org/@next/swc-linux-x64-gnu/-/swc-linux-x64-gnu-14.1.4.tgz"
-  integrity sha512-BapIFZ3ZRnvQ1uWbmqEGJuPT9cgLwvKtxhK/L2t4QYO7l+/DxXuIGjvp1x8rvfa/x1FFSsipERZK70pewbtJtw==
-
-"@next/swc-linux-x64-musl@14.1.4":
-  version "14.1.4"
-  resolved "https://registry.npmjs.org/@next/swc-linux-x64-musl/-/swc-linux-x64-musl-14.1.4.tgz"
-  integrity sha512-mqVxTwk4XuBl49qn2A5UmzFImoL1iLm0KQQwtdRJRKl21ylQwwGCxJtIYo2rbfkZHoSKlh/YgztY0qH3wG1xIg==
+  resolved "https://registry.npmjs.org/@next/swc-win32-x64-msvc/-/swc-win32-x64-msvc-14.1.4.tgz"
+  integrity sha512-4Rto21sPfw555sZ/XNLqfxDUNeLhNYGO2dlPqsnuCg8N8a2a9u1ltqBOPQ4vj1Gf7eJC0W2hHG2eYUHuiXgY2w==
 
 "@noble/curves@~1.2.0", "@noble/curves@1.2.0":
   version "1.2.0"
@@ -1739,16 +1734,6 @@
     "@nodelib/fs.scandir" "2.1.5"
     fastq "^1.6.0"
 
-"@parcel/watcher-linux-x64-glibc@2.4.1":
-  version "2.4.1"
-  resolved "https://registry.npmjs.org/@parcel/watcher-linux-x64-glibc/-/watcher-linux-x64-glibc-2.4.1.tgz"
-  integrity sha512-s9O3fByZ/2pyYDPoLM6zt92yu6P4E39a03zvO0qCHOTjxmt3GHRMLuRZEWhWLASTMSrrnVNWdVI/+pUElJBBBg==
-
-"@parcel/watcher-linux-x64-musl@2.4.1":
-  version "2.4.1"
-  resolved "https://registry.npmjs.org/@parcel/watcher-linux-x64-musl/-/watcher-linux-x64-musl-2.4.1.tgz"
-  integrity sha512-L2nZTYR1myLNST0O632g0Dx9LyMNHrn6TOt76sYxWLdff3cB22/GZX2UPtJnaqQPdCRoszoY5rcOj4oMTtp5fQ==
-
 "@parcel/watcher-wasm@^2.4.1":
   version "2.4.1"
   resolved "https://registry.npmjs.org/@parcel/watcher-wasm/-/watcher-wasm-2.4.1.tgz"
@@ -1757,6 +1742,11 @@
     is-glob "^4.0.3"
     micromatch "^4.0.5"
     napi-wasm "^1.1.0"
+
+"@parcel/watcher-win32-x64@2.4.1":
+  version "2.4.1"
+  resolved "https://registry.npmjs.org/@parcel/watcher-win32-x64/-/watcher-win32-x64-2.4.1.tgz"
+  integrity sha512-+DvS92F9ezicfswqrvIRM2njcYJbd5mb9CUgtrHCHmvn7pPPa+nMDRu1o1bYYz/l5IB2NVGNJWiH7h1E58IF2A==
 
 "@parcel/watcher@^2.4.1":
   version "2.4.1"
@@ -4029,7 +4019,7 @@ cssesc@^3.0.0:
   resolved "https://registry.npmjs.org/cssesc/-/cssesc-3.0.0.tgz"
   integrity sha512-/Tb/JcjK111nNScGob5MNtsntNM1aCNUDipB/TkwZFhyDrrE47SOx/18wF2bbjgc3ZzCSKW1T5nt5EbFoAz/Vg==
 
-csstype@^3.0.2, csstype@^3.0.7:
+csstype@^3.0.10, csstype@^3.0.2, csstype@^3.0.7, csstype@^3.1.3:
   version "3.1.3"
   resolved "https://registry.npmjs.org/csstype/-/csstype-3.1.3.tgz"
   integrity sha512-M1uQkMl8rQK/szD0LNhtqxIPLpimGm8sOBwU7lLnCpSbTyY3yeU1Vc7l4KT5zT4s/yOxHH5O7tIuuLOCnLADRw==
@@ -5267,6 +5257,11 @@ globby@^11.1.0:
     ignore "^5.2.0"
     merge2 "^1.4.1"
     slash "^3.0.0"
+
+goober@^2.1.16:
+  version "2.1.16"
+  resolved "https://registry.npmjs.org/goober/-/goober-2.1.16.tgz"
+  integrity sha512-erjk19y1U33+XAMe1VTvIONHYoSqE4iS7BYUZfHaqeohLmnC0FdxEh7rQU+6MZ4OajItzjZFSRtVANrQwNq6/g==
 
 gopd@^1.0.1:
   version "1.0.1"
@@ -7471,7 +7466,7 @@ react-devtools-core@^6.0.1:
     shell-quote "^1.6.1"
     ws "^7"
 
-"react-dom@^16.8 || ^17 || ^18", "react-dom@^16.8 || ^17.0 || ^18.0", react-dom@^18, react-dom@^18.2.0, react-dom@>=16.8.0, react-dom@>=17:
+"react-dom@^16.8 || ^17 || ^18", "react-dom@^16.8 || ^17.0 || ^18.0", react-dom@^18, react-dom@^18.2.0, react-dom@>=16, react-dom@>=16.8.0, react-dom@>=17:
   version "18.2.0"
   resolved "https://registry.npmjs.org/react-dom/-/react-dom-18.2.0.tgz"
   integrity sha512-6IMTriUmvsjHUjNtEDudZfuDQUoWXVxKHhlEGSk81n4YFS+r/Kl99wXiwlVXtPBtJenozv2P+hxDsw9eA7Xo6g==
@@ -7483,6 +7478,14 @@ react-hook-form@^7.0.0, react-hook-form@^7.51.1:
   version "7.51.1"
   resolved "https://registry.npmjs.org/react-hook-form/-/react-hook-form-7.51.1.tgz"
   integrity sha512-ifnBjl+kW0ksINHd+8C/Gp6a4eZOdWyvRv0UBaByShwU8JbVx5hTcTWEcd5VdybvmPTATkVVXk9npXArHmo56w==
+
+react-hot-toast@^2.5.2:
+  version "2.5.2"
+  resolved "https://registry.npmjs.org/react-hot-toast/-/react-hot-toast-2.5.2.tgz"
+  integrity sha512-Tun3BbCxzmXXM7C+NI4qiv6lT0uwGh4oAfeJyNOjYUejTsm35mK9iCaYLGv8cBz9L5YxZLx/2ii7zsIwPtPUdw==
+  dependencies:
+    csstype "^3.1.3"
+    goober "^2.1.16"
 
 react-i18next@^13.2.2:
   version "13.5.0"
@@ -7596,7 +7599,7 @@ react-style-singleton@^2.2.1:
     invariant "^2.2.4"
     tslib "^2.0.0"
 
-react@*, "react@^16.8 || ^17 || ^18", "react@^16.8 || ^17.0 || ^18.0", "react@^16.8.0 || ^17 || ^18", "react@^16.8.0 || ^17.0.0 || ^18.0.0", react@^18, "react@^18 || ^19", react@^18.2.0, react@^19.0.0, "react@>= 16.8.0", "react@>= 16.8.0 || 17.x.x || ^18.0.0-0", react@>=16.8, react@>=16.8.0, react@>=17, react@>=18:
+react@*, "react@^16.8 || ^17 || ^18", "react@^16.8 || ^17.0 || ^18.0", "react@^16.8.0 || ^17 || ^18", "react@^16.8.0 || ^17.0.0 || ^18.0.0", react@^18, "react@^18 || ^19", react@^18.2.0, react@^19.0.0, "react@>= 16.8.0", "react@>= 16.8.0 || 17.x.x || ^18.0.0-0", react@>=16, react@>=16.8, react@>=16.8.0, react@>=17, react@>=18:
   version "18.2.0"
   resolved "https://registry.npmjs.org/react/-/react-18.2.0.tgz"
   integrity sha512-/3IjMdb2L9QbBdWiW5e3P2/npwMBaU9mHCSCUzNln0ZCYbcfTsGbTJrU/kGemdH2IWmB2ioZ+zkxtmq6g09fGQ==
@@ -8830,10 +8833,17 @@ use-sync-external-store@1.2.0:
   resolved "https://registry.npmjs.org/use-sync-external-store/-/use-sync-external-store-1.2.0.tgz"
   integrity sha512-eEgnFxGQ1Ife9bzYs6VLi8/4X6CObHMw9Qr9tPY43iKwsPw8xE8+EFsf/2cFZ5S3esXgpWgtSCtLNS41F+sKPA==
 
-utf-8-validate@^5.0.2, utf-8-validate@^6.0.3, utf-8-validate@>=5.0.2:
-  version "6.0.3"
-  resolved "https://registry.npmjs.org/utf-8-validate/-/utf-8-validate-6.0.3.tgz"
-  integrity sha512-uIuGf9TWQ/y+0Lp+KGZCMuJWc3N9BHA+l/UmHd/oUHwJJDeysyTRxNQVkbzsIWfGFbRe3OcgML/i0mvVRPOyDA==
+utf-8-validate@^5.0.2, utf-8-validate@>=5.0.2:
+  version "5.0.10"
+  resolved "https://registry.npmjs.org/utf-8-validate/-/utf-8-validate-5.0.10.tgz"
+  integrity sha512-Z6czzLq4u8fPOyx7TU6X3dvUZVvoJmxSQ+IcrlmagKhilxlhZgxPK6C5Jqbkw1IDUmFTM+cz9QDnnLTwDz/2gQ==
+  dependencies:
+    node-gyp-build "^4.3.0"
+
+utf-8-validate@^6.0.3:
+  version "6.0.5"
+  resolved "https://registry.npmjs.org/utf-8-validate/-/utf-8-validate-6.0.5.tgz"
+  integrity sha512-EYZR+OpIXp9Y1eG1iueg8KRsY8TuT8VNgnanZ0uA3STqhHQTLwbl+WX76/9X5OY12yQubymBpaBSmMPkSTQcKA==
   dependencies:
     node-gyp-build "^4.3.0"
 
