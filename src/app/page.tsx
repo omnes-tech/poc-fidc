@@ -175,12 +175,12 @@ export default function ManagerPage() {
         <div className="mb-8">
           <div className="capitare-card">
             <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-              <div className="flex-1">
-                <h3 className="text-lg font-semibold text-gray-700 mb-2 flex items-center justify-between w-full">
-                  Available Balances - FIDC ID: {fidcId || "N/A"}{" "}
+              <div className="flex-1 w-full">
+                <h3 className="text-lg font-semibold text-gray-700 mb-2 flex flex-col sm:flex-row sm:items-center sm:justify-between w-full gap-2">
+                  <span>Available Balances - FIDC ID: {fidcId || "N/A"}</span>
                   <button
                     onClick={updateBalances}
-                    className="capitare-btn-outline px-4 py-2 flex items-center gap-2"
+                    className="capitare-btn-outline px-4 py-2 flex items-center justify-center gap-2"
                   >
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
@@ -243,7 +243,7 @@ export default function ManagerPage() {
                   </div>
                 )}
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="bg-blue-50 p-4 rounded-lg">
                     <div className="text-sm text-blue-600 font-medium mb-1">
                       Stablecoin
@@ -271,12 +271,12 @@ export default function ManagerPage() {
             <h3 className="text-lg font-semibold text-gray-700 mb-2">
               Debug Tools
             </h3>
-            <div className="grid grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               <div>
                 <h4 className="font-medium text-gray-600 mb-2">
                   Depurar Transação
                 </h4>
-                <div className="flex gap-2 mb-4">
+                <div className="flex flex-col sm:flex-row gap-2 mb-4">
                   <input
                     type="text"
                     value={debugTxHash}
@@ -287,7 +287,7 @@ export default function ManagerPage() {
                   <button
                     onClick={handleDebugTransaction}
                     disabled={isProcessing || !debugTxHash}
-                    className="capitare-btn"
+                    className="capitare-btn mt-2 sm:mt-0"
                   >
                     Depurar
                   </button>
@@ -298,7 +298,7 @@ export default function ManagerPage() {
                 <h4 className="font-medium text-gray-600 mb-2">
                   Carregar FIDC Existente
                 </h4>
-                <div className="flex gap-2 mb-4">
+                <div className="flex flex-col sm:flex-row gap-2 mb-4">
                   <input
                     type="number"
                     value={fidcIdInput}
@@ -313,7 +313,7 @@ export default function ManagerPage() {
                       }
                     }}
                     disabled={isProcessing || !fidcIdInput}
-                    className="capitare-btn"
+                    className="capitare-btn mt-2 sm:mt-0"
                   >
                     Carregar
                   </button>
@@ -355,7 +355,7 @@ export default function ManagerPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-8 mb-12">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 mb-12">
           <div className="capitare-card">
             <div className="capitare-icon">
               <svg
@@ -439,7 +439,7 @@ export default function ManagerPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-8 mb-12">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 mb-12">
           <div className="capitare-card">
             <div className="capitare-icon">
               <svg
@@ -551,7 +551,7 @@ export default function ManagerPage() {
         </div>
 
         <div className="capitare-card">
-          <div className="flex justify-between items-center w-full mb-2">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center w-full mb-2 gap-2">
             <h2 className="capitare-card-title">Transaction Logs</h2>
             <button
               onClick={clearLogs}
@@ -562,14 +562,14 @@ export default function ManagerPage() {
           </div>
 
           <div className="bg-gray-900 rounded-lg p-4 text-green-400 font-mono">
-            <div className="h-[500px] overflow-y-auto">
+            <div className="h-[300px] sm:h-[500px] overflow-y-auto">
               {logs.length === 0 ? (
                 <p className="text-gray-500">
                   No logs yet. Start operations to see transaction logs.
                 </p>
               ) : (
                 logs.map((log, i) => (
-                  <div key={i} className="mb-1">
+                  <div key={i} className="mb-1 break-words">
                     &gt; {log}
                   </div>
                 ))
