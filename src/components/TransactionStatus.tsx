@@ -62,13 +62,16 @@ function getEventDisplayValue(event: EventData): string {
   // Buscar valores relevantes com base no tipo de evento
   switch (event.name) {
     case "FIDCCreated":
-      return `FIDC ID: ${event.args[0]} | Manager: ${event.args[1].slice(
+      return `FIDC ID: ${event.args[0]} | Gestor: ${event.args[1].slice(
         0,
         6
-      )}...${event.args[1].slice(-4)} | Receivable: ${event.args[2].slice(
-        0,
-        6
-      )}...${event.args[2].slice(-4)}`;
+      )}...${event.args[1].slice(
+        -4
+      )} | Recebíveis: ${event.args[2].slice()}...${event.args[1].slice(
+        -4
+      )} | Receivable: ${event.args[2].slice(0, 6)}...${event.args[2].slice(
+        -4
+      )}`;
     case "Investment":
       return `Amount: ${ethers.formatEther(event.args[1] || "0")} Stablecoin`;
     case "QuotasMinted":
@@ -85,20 +88,24 @@ function getEventDisplayValue(event: EventData): string {
       } catch (e) {
         return `Valor: ${event.args[2] || "0"}`;
       }
-    case "Anticipation":
-      return `FIDC ID: ${event.args[0]} | PJ: ${event.args[1].slice(
-        0,
-        6
-      )}...${event.args[1].slice(-4)} | Amount: ${ethers.formatEther(
-        event.args[2]
-      )} Stablecoin | Collateral: ${ethers.formatEther(event.args[4])}`;
     case "CompensationProcessed":
-      return `FIDC ID: ${event.args[0]} | Adquirente: ${event.args[1].slice(
+      return `FIDC ID: ${
+        event.args[0]
+      } | Pagamento de Recebíveis - Adquirente: ${event.args[1].slice(
         0,
         6
-      )}...${event.args[1].slice(-4)} | Amount: ${ethers.formatEther(
+      )}...${event.args[1].slice(-4)} | Valor: ${ethers.formatEther(
         event.args[2]
       )} Stablecoin`;
+    case "Anticipation":
+      return `FIDC ID: ${
+        event.args[0]
+      } | Antecipação de Recebíveis - PJ: ${event.args[1].slice(
+        0,
+        6
+      )}...${event.args[1].slice(-4)} | Valor: ${ethers.formatEther(
+        event.args[2]
+      )} Stablecoin | Colateral: ${ethers.formatEther(event.args[4])}`;
     case "FIDCRedemption":
       const investmentDate = new Date(
         Number(event.args[8]) * 1000
@@ -106,16 +113,16 @@ function getEventDisplayValue(event: EventData): string {
       const redemptionDate = new Date(
         Number(event.args[9]) * 1000
       ).toLocaleString();
-      return `FIDC ID: ${event.args[0]} | Investor: ${event.args[1].slice(
+      return `FIDC ID: ${event.args[0]} | Investidor: ${event.args[1].slice(
         0,
         6
-      )}...${event.args[1].slice(-4)} | Amount: ${ethers.formatEther(
+      )}...${event.args[1].slice(-4)} | Valor: ${ethers.formatEther(
         event.args[2]
-      )} | Net Yield: ${ethers.formatEther(event.args[4])}`;
+      )} | Lucro Líquido: ${ethers.formatEther(event.args[4])}`;
     case "NewInvestmentRegistered":
-      return `Investor: ${event.args[0].slice(0, 6)}...${event.args[0].slice(
+      return `Investidor: ${event.args[0].slice(0, 6)}...${event.args[0].slice(
         -4
-      )} | FIDC ID: ${event.args[1]} | Investment Amount: ${ethers.formatEther(
+      )} | FIDC ID: ${event.args[1]} | Valor Investido: ${ethers.formatEther(
         event.args[3]
       )} Stablecoin`;
     default:
@@ -189,11 +196,13 @@ function EventDetails({ event }: { event: EventData }) {
       return (
         <div className="bg-green-50 p-4 rounded-lg space-y-2">
           <div className="font-medium text-green-800 mb-3">
-            Investment Details:
+            Detalhes da Investimento:
           </div>
           <div className="grid grid-cols-1 gap-3">
             <div className="flex flex-col">
-              <span className="text-sm text-gray-600">Investor Address:</span>
+              <span className="text-sm text-gray-600">
+                Endereço do Investidor:
+              </span>
               <a
                 href={`https://holesky.etherscan.io/address/${event.args[0]}`}
                 target="_blank"
@@ -211,69 +220,16 @@ function EventDetails({ event }: { event: EventData }) {
             </div>
             <div className="flex flex-col">
               <span className="text-sm text-gray-600">
-                Investment Position ID:
+                ID da Posição de Investimento:
               </span>
               <span className="font-mono text-green-700 bg-green-50 px-2 py-1 rounded">
                 {event.args[2].toString()}
               </span>
             </div>
             <div className="flex flex-col">
-              <span className="text-sm text-gray-600">Investment Amount:</span>
+              <span className="text-sm text-gray-600">Valor Investido:</span>
               <span className="font-mono text-green-700 bg-green-50 px-2 py-1 rounded">
                 {ethers.formatEther(event.args[3])} Stablecoin
-              </span>
-            </div>
-          </div>
-        </div>
-      );
-
-    case "Anticipation":
-      return (
-        <div className="bg-purple-50 p-4 rounded-lg space-y-2">
-          <div className="font-medium text-purple-800 mb-3">
-            Anticipation Details:
-          </div>
-          <div className="grid grid-cols-1 gap-3">
-            <div className="flex flex-col">
-              <span className="text-sm text-gray-600">FIDC ID:</span>
-              <span className="font-mono text-purple-700 bg-purple-50 px-2 py-1 rounded">
-                {event.args[0].toString()}
-              </span>
-            </div>
-            <div className="flex flex-col">
-              <span className="text-sm text-gray-600">PJ Address:</span>
-              <a
-                href={`https://holesky.etherscan.io/address/${event.args[1]}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-mono text-blue-600 hover:text-blue-800 bg-blue-50 px-2 py-1 rounded truncate"
-              >
-                {event.args[1]}
-              </a>
-            </div>
-            <div className="flex flex-col">
-              <span className="text-sm text-gray-600">Requested Amount:</span>
-              <span className="font-mono text-purple-700 bg-purple-50 px-2 py-1 rounded">
-                {ethers.formatEther(event.args[2])} Stablecoin
-              </span>
-            </div>
-            <div className="flex flex-col">
-              <span className="text-sm text-gray-600">
-                Collateral Contract:
-              </span>
-              <a
-                href={`https://holesky.etherscan.io/address/${event.args[3]}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-mono text-blue-600 hover:text-blue-800 bg-blue-50 px-2 py-1 rounded truncate"
-              >
-                {event.args[3]}
-              </a>
-            </div>
-            <div className="flex flex-col">
-              <span className="text-sm text-gray-600">Collateral Amount:</span>
-              <span className="font-mono text-purple-700 bg-purple-50 px-2 py-1 rounded">
-                {ethers.formatEther(event.args[4])} Collateral
               </span>
             </div>
           </div>
@@ -284,17 +240,19 @@ function EventDetails({ event }: { event: EventData }) {
       return (
         <div className="bg-orange-50 p-4 rounded-lg space-y-2">
           <div className="font-medium text-orange-800 mb-3">
-            Compensation Payment Details:
+            Detalhes do Pagamento de Recebíveis
           </div>
           <div className="grid grid-cols-1 gap-3">
             <div className="flex flex-col">
-              <span className="text-sm text-gray-600">FIDC ID:</span>
+              <span className="text-sm text-gray-600">ID do FIDC:</span>
               <span className="font-mono text-orange-700 bg-orange-50 px-2 py-1 rounded">
                 {event.args[0].toString()}
               </span>
             </div>
             <div className="flex flex-col">
-              <span className="text-sm text-gray-600">Adquirente Address:</span>
+              <span className="text-sm text-gray-600">
+                Endereço do Adquirente:
+              </span>
               <a
                 href={`https://holesky.etherscan.io/address/${event.args[1]}`}
                 target="_blank"
@@ -305,15 +263,13 @@ function EventDetails({ event }: { event: EventData }) {
               </a>
             </div>
             <div className="flex flex-col">
-              <span className="text-sm text-gray-600">
-                Compensation and burn Collateral Amount:
-              </span>
+              <span className="text-sm text-gray-600">Valor do Pagamento:</span>
               <span className="font-mono text-orange-700 bg-orange-50 px-2 py-1 rounded">
                 {ethers.formatEther(event.args[2])} Stablecoin
               </span>
             </div>
             <div className="flex flex-col">
-              <span className="text-sm text-gray-600">FIDC Vault:</span>
+              <span className="text-sm text-gray-600">Cofre do FIDC:</span>
               <a
                 href={`https://holesky.etherscan.io/address/${event.args[3]}`}
                 target="_blank"
@@ -327,21 +283,21 @@ function EventDetails({ event }: { event: EventData }) {
         </div>
       );
 
-    case "FIDCRedemption":
+    case "Anticipation":
       return (
-        <div className="bg-red-50 p-4 rounded-lg space-y-2">
-          <div className="font-medium text-red-800 mb-3">
-            Redemption Details:
+        <div className="bg-purple-50 p-4 rounded-lg space-y-2">
+          <div className="font-medium text-purple-800 mb-3">
+            Detalhes da Antecipação de Recebíveis
           </div>
           <div className="grid grid-cols-1 gap-3">
             <div className="flex flex-col">
-              <span className="text-sm text-gray-600">FIDC ID:</span>
-              <span className="font-mono text-red-700 bg-red-50 px-2 py-1 rounded">
+              <span className="text-sm text-gray-600">ID do FIDC:</span>
+              <span className="font-mono text-purple-700 bg-purple-50 px-2 py-1 rounded">
                 {event.args[0].toString()}
               </span>
             </div>
             <div className="flex flex-col">
-              <span className="text-sm text-gray-600">Investor Address:</span>
+              <span className="text-sm text-gray-600">Endereço da PJ:</span>
               <a
                 href={`https://holesky.etherscan.io/address/${event.args[1]}`}
                 target="_blank"
@@ -352,14 +308,71 @@ function EventDetails({ event }: { event: EventData }) {
               </a>
             </div>
             <div className="flex flex-col">
-              <span className="text-sm text-gray-600">Investment Amount:</span>
+              <span className="text-sm text-gray-600">Valor Solicitado:</span>
+              <span className="font-mono text-purple-700 bg-purple-50 px-2 py-1 rounded">
+                {ethers.formatEther(event.args[2])} Stablecoin
+              </span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-sm text-gray-600">
+                Contrato do Colateral:
+              </span>
+              <a
+                href={`https://holesky.etherscan.io/address/${event.args[3]}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-mono text-blue-600 hover:text-blue-800 bg-blue-50 px-2 py-1 rounded truncate"
+              >
+                {event.args[3]}
+              </a>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-sm text-gray-600">Valor do Colateral:</span>
+              <span className="font-mono text-purple-700 bg-purple-50 px-2 py-1 rounded">
+                {ethers.formatEther(event.args[4])} Colateral
+              </span>
+            </div>
+          </div>
+        </div>
+      );
+
+    case "FIDCRedemption":
+      return (
+        <div className="bg-red-50 p-4 rounded-lg space-y-2">
+          <div className="font-medium text-red-800 mb-3">
+            Detalhes da Liquidação de Recebíveis
+          </div>
+          <div className="grid grid-cols-1 gap-3">
+            <div className="flex flex-col">
+              <span className="text-sm text-gray-600">ID do FIDC:</span>
+              <span className="font-mono text-red-700 bg-red-50 px-2 py-1 rounded">
+                {event.args[0].toString()}
+              </span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-sm text-gray-600">
+                Endereço do Investidor:
+              </span>
+              <a
+                href={`https://holesky.etherscan.io/address/${event.args[1]}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-mono text-blue-600 hover:text-blue-800 bg-blue-50 px-2 py-1 rounded truncate"
+              >
+                {event.args[1]}
+              </a>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-sm text-gray-600">
+                Valor do Investimento:
+              </span>
               <span className="font-mono text-red-700 bg-red-50 px-2 py-1 rounded">
                 {ethers.formatEther(event.args[2])} Stablecoin
               </span>
             </div>
             <div className="flex flex-col">
               <span className="text-sm text-gray-600">
-                Gross Yield (Including Fee):
+                Rendimento Bruto (Com Taxa):
               </span>
               <span className="font-mono text-red-700 bg-red-50 px-2 py-1 rounded">
                 {ethers.formatEther(event.args[3])} Stablecoin
@@ -367,38 +380,40 @@ function EventDetails({ event }: { event: EventData }) {
             </div>
             <div className="flex flex-col">
               <span className="text-sm text-gray-600">
-                Net Yield (For Investor):
+                Rendimento Líquido (Para o Investidor):
               </span>
               <span className="font-mono text-red-700 bg-red-50 px-2 py-1 rounded">
                 {ethers.formatEther(event.args[4])} Stablecoin
               </span>
             </div>
             <div className="flex flex-col">
-              <span className="text-sm text-gray-600">Manager Fee:</span>
+              <span className="text-sm text-gray-600">Taxa do Gestor:</span>
               <span className="font-mono text-red-700 bg-red-50 px-2 py-1 rounded">
                 {ethers.formatEther(event.args[5])} Stablecoin
               </span>
             </div>
             <div className="flex flex-col">
-              <span className="text-sm text-gray-600">Quotas Burned:</span>
+              <span className="text-sm text-gray-600">Cotas Queimadas:</span>
               <span className="font-mono text-red-700 bg-red-50 px-2 py-1 rounded">
-                {ethers.formatEther(event.args[6])} Quotas
+                {ethers.formatEther(event.args[6])} Cotas
               </span>
             </div>
             <div className="flex flex-col">
-              <span className="text-sm text-gray-600">Senior Investor:</span>
+              <span className="text-sm text-gray-600">Investidor Sênior:</span>
               <span className="font-mono text-red-700 bg-red-50 px-2 py-1 rounded">
-                {event.args[7] ? "Yes" : "No"}
+                {event.args[7] ? "Sim" : "Não"}
               </span>
             </div>
             <div className="flex flex-col">
-              <span className="text-sm text-gray-600">Investment Date:</span>
+              <span className="text-sm text-gray-600">
+                Data do Investimento:
+              </span>
               <span className="font-mono text-red-700 bg-red-50 px-2 py-1 rounded">
                 {new Date(Number(event.args[8]) * 1000).toLocaleString()}
               </span>
             </div>
             <div className="flex flex-col">
-              <span className="text-sm text-gray-600">Redemption Date:</span>
+              <span className="text-sm text-gray-600">Data do Resgate:</span>
               <span className="font-mono text-red-700 bg-red-50 px-2 py-1 rounded">
                 {new Date(Number(event.args[9]) * 1000).toLocaleString()}
               </span>

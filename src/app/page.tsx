@@ -158,13 +158,13 @@ export default function ManagerPage() {
 
       <div className="capitare-container mx-auto px-4">
         <h1 className="capitare-section-title text-center mb-12">
-          FIDC Management Platform
+          Plataforma de Gestão de FIDC
         </h1>
 
         <p className="text-center text-white mb-8 max-w-3xl mx-auto">
-          Capitare offers a simple and intuitive process for investing in high
-          potential opportunities. See below the steps to start investing with
-          Capitare.
+          A Capitare oferece um processo simples e intuitivo para investir em
+          FIDCs com alto potencial. Veja abaixo as etapas para começar a
+          investir com a Capitare.
         </p>
 
         <TransactionStatus
@@ -181,8 +181,8 @@ export default function ManagerPage() {
           <div className="capitare-card">
             <div className="flex flex-col md:flex-row justify-between items-center gap-4">
               <div className="flex-1">
-              <h3 className="text-lg font-semibold text-gray-700 mb-2 flex flex-col sm:flex-row sm:items-center sm:justify-between w-full gap-2">
-                  Available Balances - FIDC ID: {contractFidcId || "N/A"}{" "}
+                <h3 className="text-lg font-semibold text-gray-700 mb-2 flex items-center justify-between w-full">
+                  Saldos Disponíveis - FIDC ID: {contractFidcId || "N/A"}{" "}
                   <button
                     onClick={updateBalances}
                     className="capitare-btn-outline px-4 py-2 flex items-center justify-center gap-2"
@@ -201,7 +201,7 @@ export default function ManagerPage() {
                         d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
                       />
                     </svg>
-                    Refresh Balances
+                    Atualizar Saldos
                   </button>
                 </h3>
 
@@ -251,7 +251,7 @@ export default function ManagerPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="bg-blue-50 p-4 rounded-lg">
                     <div className="text-sm text-blue-600 font-medium mb-1">
-                      Stablecoin
+                      Stablecoin (Moeda Estável)
                     </div>
                     <div className="text-2xl font-bold text-blue-800">
                       {Number(stablecoinBalance).toLocaleString()} Stablecoin
@@ -259,7 +259,7 @@ export default function ManagerPage() {
                   </div>
                   <div className="bg-purple-50 p-4 rounded-lg">
                     <div className="text-sm text-purple-600 font-medium mb-1">
-                      Receivables
+                      Recebíveis
                     </div>
                     <div className="text-2xl font-bold text-purple-800">
                       {Number(receivablesBalance).toLocaleString()} REC
@@ -325,7 +325,7 @@ export default function ManagerPage() {
                 />
               </svg>
             </div>
-            <h2 className="capitare-card-title">Get All Investors</h2>
+            <h2 className="capitare-card-title">Consultar Investidores</h2>
 
             <div className="space-y-4">
               <button
@@ -333,7 +333,7 @@ export default function ManagerPage() {
                 disabled={isProcessing || !contractFidcId}
                 className="capitare-btn w-full"
               >
-                {isProcessing ? "Processing..." : "Get All Investors"}
+                {isProcessing ? "Processando..." : "Consultar Investidores"}
               </button>
             </div>
           </div>
@@ -357,7 +357,7 @@ export default function ManagerPage() {
                 />
               </svg>
             </div>
-            <h2 className="capitare-card-title">Initialize FIDC</h2>
+            <h2 className="capitare-card-title">Inicializar FIDC</h2>
 
             <div className="space-y-4">
               <button
@@ -365,7 +365,7 @@ export default function ManagerPage() {
                 disabled={isProcessing}
                 className="capitare-btn w-full"
               >
-                {isProcessing ? "Processing..." : "Initialize New FIDC"}
+                {isProcessing ? "Processando..." : "Inicializar Novo FIDC"}
               </button>
 
               {contractFidcId && (
@@ -396,12 +396,12 @@ export default function ManagerPage() {
                 />
               </svg>
             </div>
-            <h2 className="capitare-card-title">Invest in FIDC</h2>
+            <h2 className="capitare-card-title">Investir no FIDC</h2>
 
             <div className="space-y-4">
               <div>
                 <label className="capitare-input-label">
-                  Investment Amount
+                  Valor do Investimento
                 </label>
                 <input
                   type="number"
@@ -417,7 +417,7 @@ export default function ManagerPage() {
                 disabled={isProcessing || !contractFidcId}
                 className="capitare-btn w-full"
               >
-                {isProcessing ? "Processing..." : "Invest in FIDC"}
+                {isProcessing ? "Processando..." : "Investir no FIDC"}
               </button>
             </div>
           </div>
@@ -442,13 +442,13 @@ export default function ManagerPage() {
               </svg>
             </div>
             <h2 className="capitare-card-title">
-              Request advance payment in stablecoin
+              Solicitar Antecipação em Stablecoin
             </h2>
 
             <div className="space-y-4">
               <div>
                 <label className="capitare-input-label">
-                  Stablecoin Advance Value
+                  Valor da Antecipação em Stablecoin
                 </label>
                 <input
                   type="number"
@@ -467,8 +467,8 @@ export default function ManagerPage() {
                 className="capitare-btn w-full"
               >
                 {isProcessing
-                  ? "Processing..."
-                  : "Get your advance now! Just leave your collateral"}
+                  ? "Processando..."
+                  : "Solicitar Antecipação (Mediante Colateral)"}
               </button>
             </div>
           </div>
@@ -490,7 +490,7 @@ export default function ManagerPage() {
                 />
               </svg>
             </div>
-            <h2 className="capitare-card-title">Purchaser Payment</h2>
+            <h2 className="capitare-card-title">Pagamento do Adquirente</h2>
 
             <div className="space-y-4">
               <button
@@ -498,7 +498,9 @@ export default function ManagerPage() {
                 disabled={isProcessing || !contractFidcId}
                 className="capitare-btn w-full"
               >
-                {isProcessing ? "Processing..." : "Process Purchaser Payment"}
+                {isProcessing
+                  ? "Processando..."
+                  : "Processar Pagamento do Adquirente"}
               </button>
             </div>
           </div>
@@ -523,8 +525,8 @@ export default function ManagerPage() {
               </svg>
             </div>
             <h2 className="capitare-card-title">
-              Liquidation of investments - Only manager and investments within
-              the grace period
+              Liquidação de Investimentos - Investimentos dentro do período de
+              carência
             </h2>
 
             <div className="space-y-4">
@@ -533,20 +535,20 @@ export default function ManagerPage() {
                 disabled={isProcessing || !contractFidcId}
                 className="capitare-btn w-full"
               >
-                {isProcessing ? "Processing..." : "Liquidate all"}
+                {isProcessing ? "Processando..." : "Liquidar"}
               </button>
             </div>
           </div>
         </div>
 
         <div className="capitare-card">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center w-full mb-2 gap-2">
-            <h2 className="capitare-card-title">Transaction Logs</h2>
+          <div className="flex justify-between items-center w-full mb-2">
+            <h2 className="capitare-card-title">Registro de Operações</h2>
             <button
               onClick={clearLogs}
               className="capitare-btn-outline text-sm px-2 py-1"
             >
-              Clear Logs
+              Limpar Registros
             </button>
           </div>
 

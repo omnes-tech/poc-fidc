@@ -128,14 +128,16 @@ export function useContract() {
         FIDC_Management_address
       );
       updateBalanceState({ stablecoin: ethers.formatEther(stablecoinBal) });
-      addLog(`Stablecoin balance: ${ethers.formatEther(stablecoinBal)}`);
+      addLog(
+        `Verificando saldo de Stablecoin: ${ethers.formatEther(stablecoinBal)}`
+      );
 
       // Obtém endereço do receivable do FIDC
       const receivableAddress = await fidcContract.getFIDCReceivable(
         state.fidcId
       );
       addLog(
-        `Receivable address for FIDC ${state.fidcId}: ${receivableAddress}`
+        `Endereço dos Recebíveis do FIDC ${state.fidcId}: ${receivableAddress}`
       );
 
       if (receivableAddress && receivableAddress !== ethers.ZeroAddress) {
@@ -154,7 +156,7 @@ export function useContract() {
             receivables: ethers.formatEther(receivablesBal),
           });
           addLog(
-            `Receivables balance of FIDC: ${ethers.formatEther(receivablesBal)}`
+            `Saldo de Recebíveis do FIDC: ${ethers.formatEther(receivablesBal)}`
           );
         } catch (error) {
           console.error("Error getting receivables balance:", error);
@@ -162,11 +164,11 @@ export function useContract() {
         }
       } else {
         updateBalanceState({ receivables: "0" });
-        addLog("No receivable address found for this FIDC");
+        addLog("Nenhum endereço de recebíveis encontrado para este FIDC");
       }
     } catch (error) {
       console.error("Error updating balances:", error);
-      addLog(`Error updating balances: ${error}`);
+      addLog(`Erro ao atualizar saldos: ${error}`);
     }
   }, [
     state.fidcId,
@@ -340,10 +342,10 @@ export function useContract() {
 
       if (fidcCreatedEvent) {
         const { args } = fidcCreatedEvent;
-        addLog("=== FIDC Created Successfully ===");
-        addLog(`FIDC ID: ${args[0]}`);
-        addLog(`Manager Address: ${args[1]}`);
-        addLog(`Receivable Contract: ${args[2]}`);
+        addLog("=== FIDC Criado com Sucesso ===");
+        addLog(`ID do FIDC: ${args[0]}`);
+        addLog(`Endereço do Gestor: ${args[1]}`);
+        addLog(`Contrato de Recebíveis: ${args[2]}`);
         addLog("============================");
 
         // Atualiza o estado com o novo FIDC ID
@@ -430,7 +432,7 @@ export function useContract() {
         addLog(`Approval event: ${event.name}`);
         if (event.name === "Approval") {
           addLog(
-            `Approved: ${event.args[0]} -> ${
+            `Aprovação concluída: ${event.args[0]} -> ${
               event.args[1]
             }: ${ethers.formatEther(event.args[2])} tokens`
           );
