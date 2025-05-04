@@ -35,9 +35,13 @@ export default function ManagerPage() {
   const [investAmount, setInvestAmount] = useState(1000);
   const [anticipationAmount, setAnticipationAmount] = useState(500);
   const [inputFidcId, setInputFidcId] = useState<string>("");
-  const [guaranteeType, setGuaranteeType] = useState<'consignado' | 'cartao' | 'duplicata'>('consignado');
-  const [selectedInvestor, setSelectedInvestor] = useState<string>('demo');
-  const [investorType, setInvestorType] = useState<'senior' | 'subordinado'>('senior');
+  const [guaranteeType, setGuaranteeType] = useState<
+    "consignado" | "cartao" | "duplicata"
+  >("cartao");
+  const [selectedInvestor, setSelectedInvestor] = useState<string>("demo");
+  const [investorType, setInvestorType] = useState<"senior" | "subordinado">(
+    "senior"
+  );
 
   const handleInitializeFIDC = async () => {
     try {
@@ -58,19 +62,24 @@ export default function ManagerPage() {
       setCurrentOperation("Investimento");
       setCurrentEvents([]);
       setShowInvestors(false);
-      
+
       const result = await onInvestFIDC(
-        contractFidcId, 
+        contractFidcId,
         investAmount,
         investorType,
-        selectedInvestor as 'demo' | 'pj_or_investor1' | 'pj_or_investor2' | 'pj_or_investor3' | 'pj_or_investor4'
+        selectedInvestor as
+          | "demo"
+          | "pj_or_investor1"
+          | "pj_or_investor2"
+          | "pj_or_investor3"
+          | "pj_or_investor4"
       );
 
       // Combina os eventos de aprovação e investimento
       if (result) {
         const allEvents = [
           ...(result.approveEvents || []),
-          ...(result.investEvents || [])
+          ...(result.investEvents || []),
         ];
         console.log("Todos os eventos:", allEvents);
         setCurrentEvents(allEvents);
@@ -82,14 +91,20 @@ export default function ManagerPage() {
     }
   };
 
-  const handleAnticipation = async (guaranteeType: 'consignado' | 'cartao' | 'duplicata') => {
+  const handleAnticipation = async (
+    guaranteeType: "consignado" | "cartao" | "duplicata"
+  ) => {
     if (!contractFidcId || anticipationAmount <= 0) return;
 
     try {
       setCurrentOperation("Antecipação");
       setCurrentEvents([]);
       setShowInvestors(false);
-      const result = await onAnticipation(contractFidcId, anticipationAmount, guaranteeType);
+      const result = await onAnticipation(
+        contractFidcId,
+        anticipationAmount,
+        guaranteeType
+      );
       setCurrentEvents(result.events || []);
     } catch (error) {
       console.error("Erro na antecipação:", error);
@@ -297,8 +312,10 @@ export default function ManagerPage() {
               <div className="flex gap-2">
                 <input
                   type="number"
-                  value={inputFidcId}
-                  onChange={(e) => setInputFidcId(e.target.value)}
+                  value={inputFidcId.replace(/^0+(?=\d)/, "")}
+                  onChange={(e) =>
+                    setInputFidcId(e.target.value.replace(/^0+(?=\d)/, ""))
+                  }
                   placeholder="Digite o ID do FIDC"
                   className="capitare-input flex-1"
                 />
@@ -422,19 +439,26 @@ export default function ManagerPage() {
                 </label>
                 <input
                   type="number"
-                  value={investAmount}
-                  onChange={(e) => setInvestAmount(Number(e.target.value))}
+                  value={investAmount === 0 ? "" : investAmount}
+                  onChange={(e) => {
+                    const value = e.target.value.replace(/^0+(?=\d)/, "");
+                    setInvestAmount(value === "" ? 0 : Number(value));
+                  }}
                   className="capitare-input"
                   placeholder="1000"
                 />
               </div>
 
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700">Tipo de Investidor</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Tipo de Investidor
+                </label>
                 <select
                   value={investorType}
-                  onChange={(e) => setInvestorType(e.target.value as 'senior' | 'subordinado')}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                  onChange={(e) =>
+                    setInvestorType(e.target.value as "senior" | "subordinado")
+                  }
+                  className="capitare-input bg-blue-50 border border-blue-300 text-blue-800 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition-colors"
                 >
                   <option value="senior">Senior</option>
                   <option value="subordinado">Subordinado</option>
@@ -442,11 +466,13 @@ export default function ManagerPage() {
               </div>
 
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700">Investidor</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Investidor
+                </label>
                 <select
                   value={selectedInvestor}
                   onChange={(e) => setSelectedInvestor(e.target.value)}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                  className="capitare-input bg-purple-50 border border-purple-300 text-purple-800 rounded-lg focus:ring-purple-500 focus:border-purple-500 transition-colors"
                 >
                   <option value="demo">Demo</option>
                   <option value="pj_or_investor1">Investidor 1</option>
@@ -496,23 +522,28 @@ export default function ManagerPage() {
                 </label>
                 <input
                   type="number"
-                  value={anticipationAmount}
-                  onChange={(e) => setAnticipationAmount(Number(e.target.value))}
+                  value={anticipationAmount === 0 ? "" : anticipationAmount}
+                  onChange={(e) => {
+                    const value = e.target.value.replace(/^0+(?=\d)/, "");
+                    setAnticipationAmount(value === "" ? 0 : Number(value));
+                  }}
                   className="capitare-input"
                   placeholder="500"
                 />
               </div>
 
               <div>
-                <label className="capitare-input-label">
-                  Tipo de Garantia
-                </label>
+                <label className="capitare-input-label">Tipo de Garantia</label>
                 <select
                   value={guaranteeType}
-                  onChange={(e) => setGuaranteeType(e.target.value as 'consignado' | 'cartao' | 'duplicata')}
+                  onChange={(e) =>
+                    setGuaranteeType(
+                      e.target.value as "consignado" | "cartao" | "duplicata"
+                    )
+                  }
                   className="capitare-input"
                 >
-                  <option value="consignado">Consignado</option>
+                  <option value="consignado">Soja</option>
                   <option value="cartao">Cartão</option>
                   <option value="duplicata">Duplicata</option>
                 </select>

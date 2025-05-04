@@ -2,6 +2,12 @@ import { EventData } from "@/interfaces";
 import { useState, useEffect } from "react";
 import { ethers } from "ethers";
 
+const EVENT_DISPLAY_NAMES: Record<string, string> = {
+  Anticipation: "Early Payment",
+  CompensationProcessed: "Receivable Settlement",
+  // Adicione outros se quiser mascarar mais eventos
+};
+
 // Função utilitária para formatar valores de eventos para exibição
 function formatEventValue(value: any): string {
   if (
@@ -287,7 +293,7 @@ function EventDetails({ event }: { event: EventData }) {
       return (
         <div className="bg-purple-50 p-4 rounded-lg space-y-2">
           <div className="font-medium text-purple-800 mb-3">
-            Detalhes da Antecipação de Recebíveis
+            {EVENT_DISPLAY_NAMES["Anticipation"] || "Anticipation"} Details
           </div>
           <div className="grid grid-cols-1 gap-3">
             <div className="flex flex-col">
@@ -660,7 +666,8 @@ export function TransactionStatus({
                             >
                               <div className="flex flex-col sm:flex-row sm:items-center w-full">
                                 <span className="font-medium text-gray-800 sm:mr-4 mb-1 sm:mb-0 sm:w-1/3">
-                                  {event.name}
+                                  {EVENT_DISPLAY_NAMES[event.name] ||
+                                    event.name}
                                 </span>
                                 <span className="text-gray-600 text-sm sm:w-2/3">
                                   {getEventDisplayValue(event)}
