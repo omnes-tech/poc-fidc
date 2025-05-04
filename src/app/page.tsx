@@ -35,6 +35,9 @@ export default function ManagerPage() {
   const [investAmount, setInvestAmount] = useState(1000);
   const [anticipationAmount, setAnticipationAmount] = useState(500);
   const [inputFidcId, setInputFidcId] = useState<string>("");
+  const [guaranteeType, setGuaranteeType] = useState<'consignado' | 'cartao' | 'duplicata'>('consignado');
+  const [selectedInvestor, setSelectedInvestor] = useState<string>('demo');
+  const [investorType, setInvestorType] = useState<'senior' | 'subordinado'>('senior');
 
   const handleInitializeFIDC = async () => {
     try {
@@ -55,24 +58,38 @@ export default function ManagerPage() {
       setCurrentOperation("Investimento");
       setCurrentEvents([]);
       setShowInvestors(false);
-      const result = await onInvestFIDC(contractFidcId, investAmount);
-      setCurrentEvents([
-        ...(result.approveEvents || []),
-        ...(result.investEvents || []),
-      ]);
+      
+      const result = await onInvestFIDC(
+        contractFidcId, 
+        investAmount,
+        investorType,
+        selectedInvestor as 'demo' | 'pj_or_investor1' | 'pj_or_investor2' | 'pj_or_investor3' | 'pj_or_investor4'
+      );
+
+      // Combina os eventos de aprovação e investimento
+      if (result) {
+        const allEvents = [
+          ...(result.approveEvents || []),
+          ...(result.investEvents || [])
+        ];
+        console.log("Todos os eventos:", allEvents);
+        setCurrentEvents(allEvents);
+        setForceOpenModal(true);
+      }
     } catch (error) {
-      console.error("Erro ao investir no FIDC:", error);
+      console.error("Erro no investimento:", error);
+      toast.error("Erro ao realizar investimento");
     }
   };
 
-  const handleAnticipation = async () => {
+  const handleAnticipation = async (guaranteeType: 'consignado' | 'cartao' | 'duplicata') => {
     if (!contractFidcId || anticipationAmount <= 0) return;
 
     try {
       setCurrentOperation("Antecipação");
       setCurrentEvents([]);
       setShowInvestors(false);
-      const result = await onAnticipation(contractFidcId, anticipationAmount);
+      const result = await onAnticipation(contractFidcId, anticipationAmount, guaranteeType);
       setCurrentEvents(result.events || []);
     } catch (error) {
       console.error("Erro na antecipação:", error);
@@ -412,6 +429,33 @@ export default function ManagerPage() {
                 />
               </div>
 
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700">Tipo de Investidor</label>
+                <select
+                  value={investorType}
+                  onChange={(e) => setInvestorType(e.target.value as 'senior' | 'subordinado')}
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                >
+                  <option value="senior">Senior</option>
+                  <option value="subordinado">Subordinado</option>
+                </select>
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700">Investidor</label>
+                <select
+                  value={selectedInvestor}
+                  onChange={(e) => setSelectedInvestor(e.target.value)}
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                >
+                  <option value="demo">Demo</option>
+                  <option value="pj_or_investor1">Investidor 1</option>
+                  <option value="pj_or_investor2">Investidor 2</option>
+                  <option value="pj_or_investor3">Investidor 3</option>
+                  <option value="pj_or_investor4">Investidor 4</option>
+                </select>
+              </div>
+
               <button
                 onClick={handleInvestFIDC}
                 disabled={isProcessing || !contractFidcId}
@@ -453,22 +497,35 @@ export default function ManagerPage() {
                 <input
                   type="number"
                   value={anticipationAmount}
-                  onChange={(e) =>
-                    setAnticipationAmount(Number(e.target.value))
-                  }
+                  onChange={(e) => setAnticipationAmount(Number(e.target.value))}
                   className="capitare-input"
                   placeholder="500"
                 />
               </div>
 
+              <div>
+                <label className="capitare-input-label">
+                  Tipo de Garantia
+                </label>
+                <select
+                  value={guaranteeType}
+                  onChange={(e) => setGuaranteeType(e.target.value as 'consignado' | 'cartao' | 'duplicata')}
+                  className="capitare-input"
+                >
+                  <option value="consignado">Consignado</option>
+                  <option value="cartao">Cartão</option>
+                  <option value="duplicata">Duplicata</option>
+                </select>
+              </div>
+
               <button
-                onClick={handleAnticipation}
+                onClick={() => handleAnticipation(guaranteeType)}
                 disabled={isProcessing || !contractFidcId}
                 className="capitare-btn w-full"
               >
                 {isProcessing
                   ? "Processando..."
-                  : "Solicitar Antecipação (Mediante Colateral)"}
+                  : `Solicitar Antecipação (Mediante ${guaranteeType})`}
               </button>
             </div>
           </div>

@@ -4,6 +4,8 @@ import {
   collateral_address,
   ERC20Mock_address,
   FIDC_Management_address,
+  cartao_address,
+  duplicata_address,
 } from "@/constants";
 import {
   Fidc__factory,
@@ -96,7 +98,7 @@ export function useContract() {
   // Primeiro, vamos memoizar o provider
   const memoizedProvider = useMemo(() => {
     const rpc =
-      "https://eth-holesky.g.alchemy.com/v2/BOpg9p0oZKDhPotFJUvlHPApbI9ttAWO";
+      "https://eth-holesky.g.alchemy.com/v2/l_xElq5FQnfgvTtAPWMxME5joa3hZI46";
     return new ethers.JsonRpcProvider(rpc);
   }, []);
 
@@ -187,7 +189,9 @@ export function useContract() {
     [state.fidcId, updateBalances]
   );
 
-  async function getWallet(type: "pj" | "adqui" | "manager" | "demo") {
+  async function getWallet(
+    type: "pj" | "adqui" | "manager" | "demo" | "pj_or_investor1" | "pj_or_investor2" | "pj_or_investor3" | "pj_or_investor4"
+  ) {
     const privateKey =
       type === "pj"
         ? process.env.NEXT_PUBLIC_PRIVATE_KEY_PJ
@@ -195,7 +199,15 @@ export function useContract() {
         ? process.env.NEXT_PUBLIC_PRIVATE_KEY_ADQUIRENTE
         : type === "demo"
         ? process.env.NEXT_PUBLIC_PRIVATE_KEY_DEMO
-        : process.env.NEXT_PUBLIC_PRIVATE_KEY_MANAGER;
+        : type === "manager"
+        ? process.env.NEXT_PUBLIC_PRIVATE_KEY_MANAGER
+        : type === "pj_or_investor1"
+        ? process.env.NEXT_PUBLIC_PRIVATE_KEY_PJ_OR_INVESTOR1
+        : type === "pj_or_investor2"
+        ? process.env.NEXT_PUBLIC_PRIVATE_KEY_PJ_OR_INVESTOR2
+        : type === "pj_or_investor3"
+        ? process.env.NEXT_PUBLIC_PRIVATE_KEY_PJ_OR_INVESTOR3
+        : process.env.NEXT_PUBLIC_PRIVATE_KEY_PJ_OR_INVESTOR4;
 
     const provider = await getProvider();
     const wallet = new ethers.Wallet(privateKey!, provider);
@@ -386,177 +398,199 @@ export function useContract() {
     }
   }
 
-  async function onInvestFIDC(investFidcId: number, amount: number) {
+  async function onInvestFIDC(
+    investFidcId: number, 
+    amount: number, 
+    investorType: 'senior' | 'subordinado',
+    investorWalletType: 'demo' | 'pj_or_investor1' | 'pj_or_investor2' | 'pj_or_investor3' | 'pj_or_investor4'
+  ) {
     try {
       updateTransactionState({ isProcessing: true });
       updateTransactionState({ error: null });
       const newAmount = ethers.parseEther(amount.toString());
-      addLog(`Investing ${newAmount} tokens in FIDC ID: ${investFidcId}...`);
+      
+      addLog(`Iniciando processo de investimento para FIDC ID: ${investFidcId}...`);
+      addLog(`Tipo de investidor: ${investorType}`);
+      addLog(`Tipo de carteira do investidor: ${investorWalletType}`);
 
-      const demoWallet = await getWallet("demo");
-      addLog(`Using demo wallet: ${demoWallet.address}`);
+      // Primeiro, precisamos que o manager aprove o investidor
+      const managerWallet = await getWallet("manager");
+      addLog(`Usando carteira do manager: ${managerWallet.address}`);
 
-      const erc20Contract = Erc20__factory.connect(
-        ERC20Mock_address,
-        demoWallet
+      const fidcContract = Fidc__factory.connect(FIDC_Management_address, managerWallet);
+      
+      // Obtém o endereço do investidor baseado no tipo
+      let investorAddress: string;
+      switch (investorWalletType) {
+        case 'demo':
+          const demoWallet = await getWallet("demo");
+          investorAddress = demoWallet.address;
+          break;
+        case 'pj_or_investor1':
+          investorAddress = adminAddresses.pj_or_investor1_address;
+          break;
+        case 'pj_or_investor2':
+          investorAddress = adminAddresses.pj_or_investor2_address;
+          break;
+        case 'pj_or_investor3':
+          investorAddress = adminAddresses.pj_or_investor3_address;
+          break;
+        case 'pj_or_investor4':
+          investorAddress = adminAddresses.pj_or_investor4_address;
+          break;
+        default:
+          throw new Error("Tipo de carteira de investidor inválido");
+      }
+      
+      addLog(`Endereço do investidor: ${investorAddress}`);
+      
+      // Aprova o investidor
+      addLog("Aprovando investidor...");
+      const approveInvestorTx = await fidcContract.approveInvestor(
+        [investorAddress],
+        investorType === 'senior' ? 0 : 1,
+        investFidcId
       );
-      const fidcContract = Fidc__factory.connect(
+      await approveInvestorTx.wait();
+      addLog("Investidor aprovado com sucesso!");
+
+      // Obtém a carteira do investidor
+      const investorWallet = await getWallet(investorWalletType);
+      addLog(`Usando carteira do investidor: ${investorWallet.address}`);
+
+      // Conecta ao contrato FIDC usando a carteira do investidor
+      const investorFidcContract = Fidc__factory.connect(
         FIDC_Management_address,
-        demoWallet
+        investorWallet
       );
 
-      // Verificar saldo de quotas antes do investimento
-      const quotasBeforeInvestment = await fidcContract.balanceOf(
-        demoWallet.address
-      );
-      addLog(
-        `Quotas before investment: ${ethers.formatEther(
-          quotasBeforeInvestment
-        )}`
-      );
+      // Verifica saldo de quotas antes do investimento
+      const quotasBeforeInvestment = await investorFidcContract.balanceOf(investorWallet.address);
+      addLog(`Quotas antes do investimento: ${ethers.formatEther(quotasBeforeInvestment)}`);
 
-      addLog("Sending approve transaction...");
-      const approveTx = await erc20Contract.approve(
-        FIDC_Management_address,
-        newAmount
-      );
-
-      addLog(`Approval transaction sent: ${approveTx.hash}`);
+      // Aprova o valor do investimento
+      addLog("Aprovando valor do investimento...");
+      const erc20Contract = Erc20__factory.connect(ERC20Mock_address, investorWallet);
+      const approveTx = await erc20Contract.approve(FIDC_Management_address, newAmount);
+      
+      addLog(`Transação de aprovação enviada: ${approveTx.hash}`);
       updateTransactionState({ hash: approveTx.hash });
-
+      
       const approveReceipt = await approveTx.wait();
-      addLog("Approval transaction confirmed!");
+      addLog("Aprovação confirmada!");
 
+      // Parse dos eventos de aprovação
       const approveEvents = await parseEvents(approveReceipt, erc20Contract);
-      approveEvents.forEach((event) => {
-        addLog(`Approval event: ${event.name}`);
-        if (event.name === "Approval") {
-          addLog(
-            `Aprovação concluída: ${event.args[0]} -> ${
-              event.args[1]
-            }: ${ethers.formatEther(event.args[2])} tokens`
-          );
-        }
+      approveEvents.forEach(event => {
+        addLog(`Evento de aprovação: ${event.name}`);
       });
 
-      addLog("Sending investment transaction...");
-      const investTx = await fidcContract.invest(investFidcId, newAmount);
-
-      addLog(`Investment transaction sent: ${investTx.hash}`);
+      // Realiza o investimento
+      addLog("Enviando transação de investimento...");
+      const investTx = await investorFidcContract.invest(investFidcId, newAmount);
+      
+      addLog(`Transação de investimento enviada: ${investTx.hash}`);
       updateTransactionState({ hash: investTx.hash });
-
+      
       const investReceipt = await investTx.wait();
-      addLog("Investment transaction confirmed!");
+      addLog("Investimento confirmado!");
 
-      // Verificar saldo de quotas após o investimento
-      const quotasAfterInvestment = await fidcContract.balanceOf(
-        demoWallet.address
-      );
+      // Verifica saldo de quotas após o investimento
+      const quotasAfterInvestment = await investorFidcContract.balanceOf(investorWallet.address);
       const quotasMinted = quotasAfterInvestment - quotasBeforeInvestment;
-      addLog(
-        `Quotas after investment: ${ethers.formatEther(quotasAfterInvestment)}`
-      );
-      addLog(`Total quotas minted: ${ethers.formatEther(quotasMinted)}`);
+      addLog(`Quotas após investimento: ${ethers.formatEther(quotasAfterInvestment)}`);
+      addLog(`Total de quotas emitidas: ${ethers.formatEther(quotasMinted)}`);
 
-      const investEvents = await parseEvents(investReceipt, fidcContract);
-      investEvents.forEach((event) => {
-        addLog(`Investment event: ${event.name}`);
-        if (event.name === "Investment" || event.name === "QuotasMinted") {
-          addLog(
-            `Investment details: ${JSON.stringify(
-              event.args.map((arg: any) => arg.toString())
-            )}`
-          );
-        }
+      // Parse dos eventos do investimento
+      const investEvents = await parseEvents(investReceipt, investorFidcContract);
+      investEvents.forEach(event => {
+        addLog(`Evento de investimento: ${event.name}`);
       });
 
+      // Atualiza os saldos
       await updateBalances();
-      addLog("Investment completed successfully");
+
+      addLog("Processo de investimento concluído com sucesso!");
 
       return {
         approveReceipt,
         approveEvents,
         investReceipt,
         investEvents,
-        quotasMinted: ethers.formatEther(quotasMinted),
+        quotasMinted: ethers.formatEther(quotasMinted)
       };
+
     } catch (err: any) {
       updateTransactionState({
-        error: err.message || "Error investing in FIDC",
+        error: err.message || "Erro ao processar investimento",
       });
-      addLog(`Error: ${err.message || "Unknown error"}`);
+      addLog(`Erro: ${err.message || "Erro desconhecido"}`);
       throw err;
     } finally {
       updateTransactionState({ isProcessing: false });
     }
   }
 
-  async function onAnticipation(anticipationFidcId: number, amount: number) {
+  async function onAnticipation(anticipationFidcId: number, amount: number, guaranteeType: 'consignado' | 'cartao' | 'duplicata') {
     try {
       updateTransactionState({ isProcessing: true });
       updateTransactionState({ error: null });
       const requestedAmount = ethers.parseEther(amount.toString());
-      const requiredCollateral = (requestedAmount * BigInt(120)) / BigInt(100);
+      const requiredAmount = (requestedAmount * BigInt(120)) / BigInt(100);
 
       addLog(
         `Iniciando antecipação...
         Amount solicitado: ${ethers.formatEther(requestedAmount)} Stablecoin
-        Colateral necessário: ${ethers.formatEther(
-          requiredCollateral
-        )} Collateral`
+        Garantia necessária: ${ethers.formatEther(requiredAmount)} ${guaranteeType}`
       );
 
       const pjWallet = await getWallet("pj");
       addLog(`Usando carteira PJ: ${pjWallet.address}`);
-      if (
-        pjWallet.address.toLowerCase() !==
-        adminAddresses.pj_address.toLowerCase()
-      ) {
+      if (pjWallet.address.toLowerCase() !== adminAddresses.pj_address.toLowerCase()) {
         throw new Error("Endereço incorreto para operação de PJ");
       }
-      const collateralContract = Collateral__factory.connect(
-        collateral_address,
-        pjWallet
-      );
 
-      const currentCollateral = await collateralContract.balanceOf(
-        pjWallet.address
-      );
-      addLog(`Colateral atual da PJ: ${ethers.formatEther(currentCollateral)}`);
-
-      if (currentCollateral < requiredCollateral) {
-        addLog(
-          "Colateral insuficiente. Realizando mint do colateral necessário..."
-        );
-        const mintTx = await collateralContract.mint(
-          pjWallet.address,
-          requiredCollateral
-        );
-        await mintTx.wait();
-        addLog(
-          `Mint de ${ethers.formatEther(
-            requiredCollateral
-          )} colateral realizado`
-        );
+      // Seleciona o contrato baseado no tipo de garantia
+      let guaranteeContract;
+      let guaranteeAddress;
+      switch (guaranteeType) {
+        case 'consignado':
+          guaranteeContract = Collateral__factory.connect(collateral_address, pjWallet);
+          guaranteeAddress = collateral_address;
+          break;
+        case 'cartao':
+          guaranteeContract = Erc20__factory.connect(cartao_address, pjWallet);
+          guaranteeAddress = cartao_address;
+          break;
+        case 'duplicata':
+          guaranteeContract = Erc20__factory.connect(duplicata_address, pjWallet);
+          guaranteeAddress = duplicata_address;
+          break;
+        default:
+          throw new Error("Tipo de garantia inválido");
       }
 
-      addLog("Aprovando uso do colateral pelo contrato FIDC...");
-      const approveTx = await collateralContract.approve(
-        FIDC_Management_address,
-        requiredCollateral
-      );
-      await approveTx.wait();
-      addLog("Aprovação do colateral concluída");
+      const currentBalance = await guaranteeContract.balanceOf(pjWallet.address);
+      addLog(`Saldo atual de ${guaranteeType}: ${ethers.formatEther(currentBalance)}`);
 
-      const fidcContract = Fidc__factory.connect(
-        FIDC_Management_address,
-        pjWallet
-      );
+      if (currentBalance < requiredAmount) {
+        addLog(`Saldo insuficiente. Realizando mint do ${guaranteeType} necessário...`);
+        const mintTx = await guaranteeContract.mint(pjWallet.address, requiredAmount);
+        await mintTx.wait();
+        addLog(`Mint de ${ethers.formatEther(requiredAmount)} ${guaranteeType} realizado`);
+      }
+
+      addLog(`Aprovando uso do ${guaranteeType} pelo contrato FIDC...`);
+      const approveTx = await guaranteeContract.approve(FIDC_Management_address, requiredAmount);
+      await approveTx.wait();
+      addLog(`Aprovação do ${guaranteeType} concluída`);
+
+      const fidcContract = Fidc__factory.connect(FIDC_Management_address, pjWallet);
 
       addLog("Enviando transação de antecipação...");
       const anticipationTx = await fidcContract.anticipation(
         requestedAmount,
-        collateral_address,
+        guaranteeAddress,
         anticipationFidcId,
         { gasLimit: 1000000 }
       );
@@ -583,8 +617,8 @@ export function useContract() {
           FIDC ID: ${args[0]}
           PJ: ${args[1]}
           Amount: ${ethers.formatEther(args[2])} Stablecoin
-          Colateral: ${args[3]}
-          Colateral Required: ${ethers.formatEther(args[4])}
+          Garantia: ${args[3]}
+          Garantia Required: ${ethers.formatEther(args[4])}
         `);
       }
 
@@ -711,9 +745,9 @@ export function useContract() {
         addLog(`Compensation processed for FIDC ID: ${args[0]}`);
         addLog(`Adquirente: ${args[1]}`);
         addLog(`Amount: ${ethers.formatEther(args[2])}`);
-        addLog(`Collateral Token: ${args[3]}`);
-        addLog(`Collateral Amount: ${ethers.formatEther(args[4])}`);
-        addLog(`Is External Collateral: ${args[5]}`);
+        addLog(`Garantia Token: ${args[3]}`);
+        addLog(`Garantia Amount: ${ethers.formatEther(args[4])}`);
+        addLog(`Is External Garantia: ${args[5]}`);
       }
 
       await updateBalances();
