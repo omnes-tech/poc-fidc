@@ -1,10 +1,18 @@
 "use client";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import CapitareHeader from "@/components/CapitareHeader";
 import { useContract } from "@/hooks/useContract";
 import { EventData } from "@/interfaces";
 import { TransactionStatus } from "@/components/TransactionStatus";
 import { toast } from "react-hot-toast";
+import { adminAddresses } from "@/constants";
+
+interface Config{
+  fee: number;
+  annual: number;
+  grace: number;
+  senior: number;
+}
 
 export default function ManagerPage() {
   const {
@@ -24,6 +32,7 @@ export default function ManagerPage() {
     onGetFIDC,
     onGetAllInvestors,
     txHash,
+    getReceivablesAmount
   } = useContract();
 
   const [currentOperation, setCurrentOperation] = useState<string>("");
@@ -31,7 +40,13 @@ export default function ManagerPage() {
   const [investors, setInvestors] = useState<string[]>([]);
   const [showInvestors, setShowInvestors] = useState<boolean>(false);
   const [forceOpenModal, setForceOpenModal] = useState<boolean>(false);
-
+  const [configsFidic, setConfigFidic] = useState<Config>({
+    fee: 100,
+    annual: 1800,
+    grace: 35,
+    senior: 500
+  })
+  const [receivableLimit, setReceivableLimit] = useState<any>(null)
   const [investAmount, setInvestAmount] = useState(1000);
   const [anticipationAmount, setAnticipationAmount] = useState(500);
   const [inputFidcId, setInputFidcId] = useState<string>("");
@@ -43,12 +58,31 @@ export default function ManagerPage() {
     "senior"
   );
 
+  console.log(contractFidcId)
+
+  useEffect(() => {
+    async function getReceivables() {
+      try{
+        if(contractFidcId){
+          const response = await getReceivablesAmount(contractFidcId)
+          console.log(response)
+        }
+      }catch(err){
+        console.log(err)
+      }
+    }
+
+    if(contractFidcId){
+      getReceivables()
+    }
+  },[contractFidcId])
+
   const handleInitializeFIDC = async () => {
     try {
       setCurrentOperation("Inicialização de FIDC");
       setCurrentEvents([]);
       setShowInvestors(false);
-      const result = await onInitializeFIDC();
+      const result = await onInitializeFIDC(configsFidic);
       setCurrentEvents(result.events || []);
     } catch (error) {
       console.error("Erro ao inicializar FIDC:", error);
@@ -394,6 +428,83 @@ export default function ManagerPage() {
             <h2 className="capitare-card-title">Inicializar FIDC</h2>
 
             <div className="space-y-4">
+              <div>
+                <label className="capitare-input-label">
+                  Endereço do Gestor
+                </label>
+                <input
+                  type="text"
+                  value={adminAddresses.manager_address}
+                  className="capitare-input"
+                  placeholder="1000"
+                  readOnly
+                />
+              </div>
+              <div>
+                <label className="capitare-input-label">Spread do Gestor</label>
+                <input
+                  type="number"
+                  value={configsFidic.fee}
+                  onChange={(e) => {
+                    let value = e.target.value.replace(/^0+(?=\d)/, "");
+                    let number = value === "" ? 0 : Number(value);
+                    number = Math.max(100, Math.min(1000, number));
+                    setConfigFidic({ ...configsFidic, fee: number });
+                  }}
+                  className="capitare-input"
+                  defaultValue={100}
+                />
+              </div>
+
+              <div>
+                <label className="capitare-input-label">Juros Anuais</label>
+                <input
+                  type="number"
+                  value={configsFidic.annual}
+                  onChange={(e) => {
+                    let value = e.target.value.replace(/^0+(?=\d)/, "");
+                    let number = value === "" ? 0 : Number(value);
+                    number = Math.max(0, Math.min(20000, number));
+                    setConfigFidic({ ...configsFidic, annual: number });
+                  }}
+                  className="capitare-input"
+                  defaultValue={1800}
+                />
+              </div>
+
+              <div>
+                <label className="capitare-input-label">Tempo para Liquidação (Segundos)</label>
+                <input
+                  type="number"
+                  value={configsFidic.grace}
+                  onChange={(e) => {
+                    let value = e.target.value.replace(/^0+(?=\d)/, "");
+                    let number = value === "" ? 0 : Number(value);
+                    const maxGrace = 3 * 365 * 24 * 60 * 60;
+                    number = Math.max(35, Math.min(maxGrace, number));
+                    setConfigFidic({ ...configsFidic, grace: number });
+                  }}
+                  className="capitare-input"
+                  defaultValue={35}
+                />
+              </div>
+
+              <div>
+                <label className="capitare-input-label">Spread Senior</label>
+                <input
+                  type="number"
+                  value={configsFidic.senior}
+                  onChange={(e) => {
+                    let value = e.target.value.replace(/^0+(?=\d)/, "");
+                    let number = value === "" ? 0 : Number(value);
+                    number = Math.max(0, Math.min(2000, number));
+                    setConfigFidic({ ...configsFidic, senior: number });
+                  }}
+                  className="capitare-input"
+                  defaultValue={500}
+                />
+              </div>
+
               <button
                 onClick={handleInitializeFIDC}
                 disabled={isProcessing}
@@ -529,6 +640,20 @@ export default function ManagerPage() {
                   }}
                   className="capitare-input"
                   placeholder="500"
+                />
+              </div>
+
+              <div>
+                <label className="capitare-input-label">
+                  Valor da Antecipação com Colateral
+                </label>
+                <input
+                  type="number"
+                  value={(anticipationAmount * 120) / 100}
+                  className="capitare-input"
+                  placeholder="500"
+                  readOnly
+                  style={{pointerEvents: 'none'}}
                 />
               </div>
 

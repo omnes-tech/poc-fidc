@@ -30,6 +30,13 @@ interface ContractState {
   logs: string[];
 }
 
+interface Config{
+  fee: number;
+  annual: number;
+  grace: number;
+  senior: number;
+}
+
 export function useContract() {
   // Estado combinado
   const [state, setState] = useState<ContractState>({
@@ -321,7 +328,7 @@ export function useContract() {
     return events;
   }
 
-  async function onInitializeFIDC() {
+  async function onInitializeFIDC(configs: Config) {
     try {
       updateTransactionState({ isProcessing: true });
       updateTransactionState({ error: null });
@@ -332,7 +339,7 @@ export function useContract() {
         FIDC_Management_address,
         managerWallet
       );
-      const fidcConfig = { fee: 100, annual: 1800, grace: 35, senior: 500 };
+     ;
 
       addLog(`Using manager wallet: ${managerWallet.address}`);
       addLog("Sending initializeFIDC transaction...");
@@ -341,10 +348,10 @@ export function useContract() {
         adminAddresses.manager_address,
         adminAddresses.pj_address,
         adminAddresses.adqui_address,
-        fidcConfig.fee,
-        fidcConfig.annual,
-        fidcConfig.grace,
-        fidcConfig.senior
+        configs.fee,
+        configs.annual,
+        configs.grace,
+        configs.senior
       );
 
       addLog(`Transaction sent: ${initializeTx.hash}`);
@@ -714,6 +721,47 @@ export function useContract() {
     }
   }
 
+  async function getReceivablesAmount(compensationFidcId: number) {
+    try{
+      const adquiWallet = await getWallet("adqui");
+      console.log(`Using adquirente wallet: ${adquiWallet.address}`);
+
+      const fidcContract = Fidc__factory.connect(
+        FIDC_Management_address,
+        adquiWallet
+      );
+
+      // Obtém endereço do receivable do FIDC
+      console.log("Getting receivable address...");
+      const receivableAddress = await fidcContract.getFIDCReceivable(
+        compensationFidcId
+      );
+      console.log(`Receivable address: ${receivableAddress}`);
+
+      if (!receivableAddress || receivableAddress === ethers.ZeroAddress) {
+        throw new Error("No receivable address found for this FIDC");
+      }
+
+      // Conecta ao contrato de receivables
+      const receivableContract = Erc20__factory.connect(
+        receivableAddress,
+        adquiWallet
+      );
+
+      // Obtém o saldo de receivables do FIDC
+      const receivablesBal = await receivableContract.balanceOf(
+        FIDC_Management_address
+      );
+
+      console.log(`Receivable ${receivablesBal}`);
+
+      return receivablesBal;
+
+    } catch (err) {
+      console.log(err)
+    }
+  }
+
   async function onCompensation(compensationFidcId: number) {
     try {
       updateTransactionState({ isProcessing: true });
@@ -960,14 +1008,16 @@ export function useContract() {
 
       // Busca os saldos em uma única operação
       const provider = await getProvider();
-      const { drexContract } = await memoizedContracts;
+      
       const receivableContract = Erc20__factory.connect(
         receivableAddress,
         provider
       );
 
+      console.log(fidcContract.getFIDCTotalInvested(Number(id)))
+
       const [stablecoinBal, receivablesBal] = await Promise.all([
-        drexContract.balanceOf(FIDC_Management_address),
+        fidcContract.getFIDCTotalInvested(Number(id)),
         receivableContract.balanceOf(FIDC_Management_address),
       ]);
 
@@ -985,7 +1035,7 @@ export function useContract() {
         receivableAddress,
       };
     } catch (error: any) {
-      addLog(`Erro ao verificar FIDC: ${error.message}`);
+      console.log(`Erro ao verificar FIDC: ${error.message}`);
       updateState({ fidcId: null });
       updateBalanceState({ stablecoin: "0", receivables: "0" });
       return null;
@@ -1108,5 +1158,6 @@ export function useContract() {
     txHash: state.transaction.hash,
     debugTransactionEvents,
     onGetAllInvestors,
+    getReceivablesAmount
   };
 }

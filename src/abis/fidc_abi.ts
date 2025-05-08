@@ -192,6 +192,13 @@ const fidcAbi = [
   },
   {
     type: "function",
+    name: "fidcTotalInvested",
+    inputs: [{ name: "", type: "uint256", internalType: "uint256" }],
+    outputs: [{ name: "", type: "uint256", internalType: "uint256" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
     name: "fidcs",
     inputs: [{ name: "", type: "uint256", internalType: "uint256" }],
     outputs: [
@@ -242,6 +249,13 @@ const fidcAbi = [
     outputs: [
       { name: "", type: "address", internalType: "contract Receivable" },
     ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "getFIDCTotalInvested",
+    inputs: [{ name: "_fidcId", type: "uint256", internalType: "uint256" }],
+    outputs: [{ name: "", type: "uint256", internalType: "uint256" }],
     stateMutability: "view",
   },
   {
@@ -1359,5 +1373,6 @@ const fidcAbi = [
   { type: "error", name: "ValidatorNotApproved", inputs: [] },
   { type: "error", name: "ZeroAddress", inputs: [] },
   { type: "error", name: "ZeroAmount", inputs: [] },
-]
+];
 export default fidcAbi;
+

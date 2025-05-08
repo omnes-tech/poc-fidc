@@ -8,9 +8,9 @@ export const adminAddresses = {
   pj_or_investor4_address: "0x904939e12C0d956c7e612ce24E3786242fb3B2d5",
 };
 export const FIDC_Management_address =
-  "0x2567121133cfcB80a6D3E07eA349b2743168D222";
-export const ERC20Mock_address = "0x94ba8D6149F49201878BC891a5a29d19Bd15c06E";
-export const collateral_address = "0x8Ed5C0Ddd7295a678B0f123208E4a08d9e9E568C";
+  "0xe2452989113b0EF531359F4191a5D1eb3b556335";
+export const ERC20Mock_address = "0xe65aa642164bbE40834DAb8Ec8617807280B5482";
+export const collateral_address = "0xf053666D430769844D0C75dC8A90E23A33EF4E26";
 export const cartao_address = "0xDd48c014765843211e3bAE04C07f2aA5F2D2402b";
 export const duplicata_address = "0xEB83e1e174d12D7CA44080533114eBB9F6566ed7";
 

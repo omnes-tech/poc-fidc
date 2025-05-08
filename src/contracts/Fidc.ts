@@ -1304,6 +1304,12 @@ export interface Fidc extends BaseContract {
     "view"
   >;
 
+  getFIDCTotalInvested: TypedContractMethod<
+    [_fidcId: BigNumberish],
+    [number],
+    "view"
+  >;
+
   getInvestments: TypedContractMethod<
     [_investor: AddressLike, _fidcId: BigNumberish],
     [IFIDC.InvestmentStructOutput[]],
