@@ -77,7 +77,7 @@ export default function ManagerPage() {
     if(contractFidcId){
       getReceivables();
     }
-  },[contractFidcId]);
+  },[contractFidcId, currentEvents, currentOperation]);
 
   const handleInitializeFIDC = async () => {
     try {
