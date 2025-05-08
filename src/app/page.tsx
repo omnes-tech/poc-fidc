@@ -46,6 +46,7 @@ export default function ManagerPage() {
     grace: 35,
     senior: 500
   })
+  const [compensationValue, setCompensationValue] = useState<any>(null)
   const [receivableLimit, setReceivableLimit] = useState<any>(null)
   const [investAmount, setInvestAmount] = useState(1000);
   const [anticipationAmount, setAnticipationAmount] = useState(500);
@@ -64,18 +65,19 @@ export default function ManagerPage() {
     async function getReceivables() {
       try{
         if(contractFidcId){
-          const response = await getReceivablesAmount(contractFidcId)
+          const response = await getReceivablesAmount(contractFidcId);
           console.log(response)
+          setReceivableLimit(Number(response));
         }
       }catch(err){
-        console.log(err)
+        console.log(err);
       }
     }
 
     if(contractFidcId){
-      getReceivables()
+      getReceivables();
     }
-  },[contractFidcId])
+  },[contractFidcId]);
 
   const handleInitializeFIDC = async () => {
     try {
@@ -152,7 +154,7 @@ export default function ManagerPage() {
       setCurrentOperation("Pagamento do Adiquirente");
       setCurrentEvents([]);
       setShowInvestors(false);
-      const result = await onCompensation(contractFidcId);
+      const result = await onCompensation(contractFidcId, compensationValue);
       setCurrentEvents(result.events || []);
     } catch (error) {
       console.error("Erro no pagamento do adiquirente:", error);
@@ -217,6 +219,13 @@ export default function ManagerPage() {
       setInvestors([]);
     }
   };
+
+  function formatBigInt(raw: string | number | bigint): number {
+    const value = BigInt(raw); // conversão segura
+    const divisor = BigInt("1000000000000000000"); // 1e18
+    const result = value / divisor;
+    return Number(result);
+  }
 
   return (
     <div className="capitare-gradient-bg min-h-screen pt-20 pb-12">
@@ -706,9 +715,33 @@ export default function ManagerPage() {
             <h2 className="capitare-card-title">Pagamento do Adquirente</h2>
 
             <div className="space-y-4">
+              <div>
+                <label className="capitare-input-label">
+                  Valor do Pagamento
+                </label>
+                <input
+                  type="number"
+                  value={compensationValue}
+                  onChange={(e) => {
+                    const raw = e.target.value.replace(/^0+(?=\d)/, "");
+                    const numericValue = Number(raw);
+                    const limit = receivableLimit ? formatBigInt(receivableLimit) : Infinity;
+            
+                    if (numericValue <= limit) {
+                      setCompensationValue(raw); // Apenas define se for válido
+                    }
+                  }}
+                  className="capitare-input"
+                  placeholder="500"
+                />
+                {
+                  receivableLimit &&
+                  <span><p style={{marginTop: '10px'}}>Valor máximo de pagamento: <strong>{formatBigInt(receivableLimit)}</strong></p></span>
+                }
+              </div>
               <button
                 onClick={handleCompensation}
-                disabled={isProcessing || !contractFidcId}
+                disabled={isProcessing || !contractFidcId || !compensationValue}
                 className="capitare-btn w-full"
               >
                 {isProcessing

@@ -1375,4 +1375,3 @@ const fidcAbi = [
   { type: "error", name: "ZeroAmount", inputs: [] },
 ];
 export default fidcAbi;
-

@@ -15,6 +15,7 @@ import {
 import { ethers } from "ethers";
 import { useCallback, useEffect, useState, useMemo } from "react";
 import { debounce } from "lodash";
+import { parseUnits } from "ethers";
 
 interface ContractState {
   fidcId: number | null;
@@ -762,105 +763,72 @@ export function useContract() {
     }
   }
 
-  async function onCompensation(compensationFidcId: number) {
+  async function onCompensation(compensationFidcId: number, compensationValue: number) {
     try {
       updateTransactionState({ isProcessing: true });
       updateTransactionState({ error: null });
-      addLog(
-        `Processing compensation payment for FIDC ID: ${compensationFidcId}...`
-      );
-
+      addLog(`Processing compensation payment for FIDC ID: ${compensationFidcId}...`);
+  
       const adquiWallet = await getWallet("adqui");
       addLog(`Using adquirente wallet: ${adquiWallet.address}`);
-
-      const fidcContract = Fidc__factory.connect(
-        FIDC_Management_address,
-        adquiWallet
-      );
-
-      // Obtém endereço do receivable do FIDC
+  
+      const fidcContract = Fidc__factory.connect(FIDC_Management_address, adquiWallet);
+  
       addLog("Getting receivable address...");
-      const receivableAddress = await fidcContract.getFIDCReceivable(
-        compensationFidcId
-      );
+      const receivableAddress = await fidcContract.getFIDCReceivable(compensationFidcId);
       addLog(`Receivable address: ${receivableAddress}`);
-
+  
       if (!receivableAddress || receivableAddress === ethers.ZeroAddress) {
         throw new Error("No receivable address found for this FIDC");
       }
-
-      // Conecta ao contrato de receivables
-      const receivableContract = Erc20__factory.connect(
-        receivableAddress,
-        adquiWallet
-      );
-
-      // Obtém o saldo de receivables do FIDC
-      const receivablesBal = await receivableContract.balanceOf(
-        FIDC_Management_address
-      );
+  
+      const receivableContract = Erc20__factory.connect(receivableAddress, adquiWallet);
+  
+      const receivablesBal = await receivableContract.balanceOf(FIDC_Management_address);
       const receivablesAmount = ethers.formatEther(receivablesBal);
       addLog(`Receivables to compensate: ${receivablesAmount}`);
-
-      // Conecta ao contrato de stablecoin (ERC20Mock)
-      const stablecoinContract = Erc20__factory.connect(
-        ERC20Mock_address,
-        adquiWallet
-      );
-
-      // Verifica o saldo de stablecoins do adquirente
-      const adquiBalance = await stablecoinContract.balanceOf(
-        adquiWallet.address
-      );
-      addLog(
-        `Current adquirente stablecoin balance: ${ethers.formatEther(
-          adquiBalance
-        )}`
-      );
-
-      // Se o saldo for insuficiente, faz o mint
-      if (adquiBalance < receivablesBal) {
+  
+      const stablecoinContract = Erc20__factory.connect(ERC20Mock_address, adquiWallet);
+      const adquiBalance = await stablecoinContract.balanceOf(adquiWallet.address);
+      addLog(`Current adquirente stablecoin balance: ${ethers.formatEther(adquiBalance)}`);
+  
+      // 💡 Transforma compensationValue (ex: 1200) em wei
+      const compensationInWei = parseUnits(compensationValue.toString(), 18);
+  
+      // ✅ Usa o menor entre compensationInWei e receivablesBal
+      const amountToPay = compensationInWei >= receivablesBal ? receivablesBal : compensationInWei;
+      const formattedAmount = ethers.formatEther(amountToPay);
+  
+      addLog(`Amount to pay: ${formattedAmount} stablecoins`);
+  
+      if (adquiBalance < amountToPay) {
         addLog("Insufficient stablecoin balance. Minting required amount...");
-        const mintTx = await stablecoinContract.mint(
-          adquiWallet.address,
-          receivablesBal
-        );
+        const mintTx = await stablecoinContract.mint(adquiWallet.address, amountToPay);
         await mintTx.wait();
-        addLog(`Minted ${receivablesAmount} stablecoins to adquirente`);
+        addLog(`Minted ${formattedAmount} stablecoins to adquirente`);
       }
-
-      // Aprova o FIDC para gastar os stablecoins
+  
       addLog("Approving FIDC to spend stablecoins...");
-      const approveTx = await stablecoinContract.approve(
-        FIDC_Management_address,
-        receivablesBal
-      );
+      const approveTx = await stablecoinContract.approve(FIDC_Management_address, amountToPay);
       await approveTx.wait();
-      addLog(`Approved ${receivablesAmount} stablecoins for FIDC`);
-
-      // Executa a compensação
+      addLog(`Approved ${formattedAmount} stablecoins for FIDC`);
+  
       addLog("Sending compensation transaction...");
-      const compensationTx = await fidcContract.compensationPay(
-        compensationFidcId,
-        receivablesBal,
-        { gasLimit: 1000000 }
-      );
-
+      const compensationTx = await fidcContract.compensationPay(compensationFidcId, amountToPay, {
+        gasLimit: 1000000,
+      });
+  
       addLog(`Compensation transaction sent: ${compensationTx.hash}`);
       updateTransactionState({ hash: compensationTx.hash });
-
+  
       const receipt = await compensationTx.wait();
       addLog("Compensation transaction confirmed!");
-
+  
       const events = await parseEvents(receipt, fidcContract);
-      events.forEach((event) => {
-        addLog(`Event: ${event.name}`);
-      });
-
-      const compensationEvent = events.find(
-        (event) => event.name === "CompensationProcessed"
-      );
-
+      events.forEach((event) => addLog(`Event: ${event.name}`));
+  
+      const compensationEvent = events.find((event) => event.name === "CompensationProcessed");
+  
       if (compensationEvent) {
         const { args } = compensationEvent;
         addLog(`Compensation processed for FIDC ID: ${args[0]}`);
@@ -870,21 +838,20 @@ export function useContract() {
         addLog(`Garantia Amount: ${ethers.formatEther(args[4])}`);
         addLog(`Is External Garantia: ${args[5]}`);
       }
-
+  
       await updateBalances();
       addLog("Compensation payment completed successfully");
-
+  
       return { receipt, events, compensationEvent };
     } catch (err: any) {
-      updateTransactionState({
-        error: err.message || "Error processing compensation",
-      });
+      updateTransactionState({ error: err.message || "Error processing compensation" });
       addLog(`Error: ${err.message || "Unknown error"}`);
       throw err;
     } finally {
       updateTransactionState({ isProcessing: false });
     }
   }
+  
 
   async function onRedeem(redeemFidcId: number) {
     try {
@@ -1014,10 +981,8 @@ export function useContract() {
         provider
       );
 
-      console.log(fidcContract.getFIDCTotalInvested(Number(id)))
-
       const [stablecoinBal, receivablesBal] = await Promise.all([
-        fidcContract.getFIDCTotalInvested(Number(id)),
+        fidcContract.getFIDCInvested(id),
         receivableContract.balanceOf(FIDC_Management_address),
       ]);
 
